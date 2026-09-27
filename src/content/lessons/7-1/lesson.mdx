@@ -1,0 +1,42 @@
+## About this practice exam
+
+This exam has **15 questions** drawn from three of the six scenarios: the **customer support resolution agent**, the **multi-agent research system** and **developer productivity tools**. Together they concentrate on **Domain 1** (Agentic Architecture & Orchestration), **Domain 2** (Tool Design & MCP Integration) and **Domain 5** (Context Management & Reliability), which make up 60% of the real exam's weight.
+
+The questions are new. None are taken from the real exam or copied from the exam guide's samples, but they're written to the same pattern: a production context, a symptom, a qualifier such as "most effective" or "first step", and four or five plausible options. The quiz scores it like the exam, with all-or-nothing multi-select, and you pass with **12 of 15**.
+
+## How to take it
+
+1. **Time yourself.** The real exam gives you 120 minutes for 60 items, about 2 minutes each. Give yourself **30 minutes** here, and don't look anything up.
+2. **Answer every question before submitting.** On the exam, an unanswered item is simply wrong, so an educated guess is always better.
+3. **Write down your confidence** for each answer (sure, leaning, guessing) before you submit. Afterward, compare it with your results. Confident misses tell you more than lucky guesses do.
+
+## A method for scenario questions
+
+Most items can be worked through in four steps:
+
+1. **Find the qualifier.** "Most effective", "first step", "most maintainable" and "guarantee" each point to a different kind of answer. "Guarantee" usually means a deterministic control. "First step" usually means the least-effort fix that addresses the root cause.
+2. **Name the root cause** in a few words before you read the options: "the coordinator's decomposition", "vague tool descriptions", "context passed as prose".
+3. **Eliminate by pattern.** Strike options that rely on prompt wording when a guarantee is needed, add infrastructure before trying the simple fix, treat a symptom downstream of the cause, or use features that don't exist.
+4. **Choose between the last two** by asking which one fixes the cause you named, not which one sounds most thorough.
+
+For multi-select items, judge each option on its own. Two correct answers often fix two different parts of the problem.
+
+## After you submit
+
+Read every explanation, including the ones you got right. Then use this map to go back to the lessons behind your misses:
+
+| Questions | Scenario | Lessons to revisit |
+|---|---|---|
+| 1–5 | Customer support agent | 1.1, 1.7, 2.2, 2.5, 5.3 |
+| 6–10 | Multi-agent research system | 1.3, 1.5, 1.9, 2.3, 5.2 |
+| 11–15 | Developer productivity | 1.7, 1.8, 2.6, 2.7, 5.5 |
+
+If you score below 12, revisit those lessons and retake the exam a day later. Retaking it straight away mostly measures your memory of the answers.
+
+<KeyTakeaways>
+
+- Work each item as **qualifier → root cause → eliminate by pattern → choose**.
+- **Guarantees** come from code (hooks, gates, schemas). **Selection problems** usually start with descriptions and scope. **Context problems** come from organization, not window size.
+- Track **confidence as well as correctness**. Confident misses show where your understanding needs work.
+
+</KeyTakeaways>

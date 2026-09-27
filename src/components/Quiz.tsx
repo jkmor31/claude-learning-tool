@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { QuizQuestion } from "@/content/types";
-import { PASS_THRESHOLD } from "@/content/curriculum";
+import { passThreshold } from "@/content/curriculum";
 import { recordQuizResult } from "@/lib/progress";
 
 const LETTERS = "ABCDEFGH";
@@ -16,7 +16,8 @@ export function Quiz({ lessonId, questions }: { lessonId: string; questions: Qui
   const [submitted, setSubmitted] = useState(false);
 
   const score = questions.filter((q, i) => isCorrect(q, answers[i])).length;
-  const passed = score >= PASS_THRESHOLD;
+  const threshold = passThreshold(questions.length);
+  const passed = score >= threshold;
   const complete = questions.every((q, i) => answers[i].length === q.correct.length);
 
   function toggle(qi: number, ci: number) {
@@ -45,7 +46,7 @@ export function Quiz({ lessonId, questions }: { lessonId: string; questions: Qui
     <section aria-labelledby="quiz-heading" className="mt-14">
       <h2 id="quiz-heading" className="text-2xl font-semibold">Knowledge Check</h2>
       <p className="mt-1 text-sm text-muted">
-        {questions.length} questions · pass with {PASS_THRESHOLD}/{questions.length}. Multi-select items are scored
+        {questions.length} questions · pass with {threshold}/{questions.length}. Multi-select items are scored
         all-or-nothing, like the real exam.
       </p>
 

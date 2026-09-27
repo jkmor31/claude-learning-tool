@@ -16,7 +16,7 @@ Study app for the Claude Certified Architect – Foundations exam (code CCAR-F).
 - The official exam guide lives at `reference/exam-guide.pdf`, with a text extraction at `reference/exam-guide.txt` (both git-ignored; never commit or quote them at length). Grep the .txt for "Task Statement X.Y" before writing a lesson; PDF page rendering isn't available on this machine. If either file is missing, ask the user.
 - Never add real exam questions or anything a user saw in the actual exam (covered by the exam NDA).
 - Ground every lesson in the official exam guide's "Knowledge of" / "Skills in" bullets for its task statements. Skip topics the guide lists as out of scope.
-- Quiz: exactly 5 questions in the exam's scenario style (context → symptom → qualifier → options). Mix single-answer and multi-select ("Select N"); multi-select is scored all-or-nothing. Pass is 4/5.
+- Quiz: exactly 5 questions in the exam's scenario style (context → symptom → qualifier → options); Module 7 practice exams have 15. Mix single-answer and multi-select ("Select N"); multi-select is scored all-or-nothing. Pass is 80% (`passThreshold` in `curriculum.ts`): 4/5, or 12/15.
 - Spread correct answers across letter positions; never let one letter dominate a quiz. Explanations refer to options by letter, so recheck the letters after reordering choices.
 - Explanations say why the correct answer is right AND why each distractor is wrong, naming the anti-pattern.
 - Don't copy the guide's sample questions verbatim; write new scenarios that test the same judgment.

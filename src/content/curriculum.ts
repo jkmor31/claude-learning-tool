@@ -1,6 +1,9 @@
 import type { LessonMeta, Module } from "./types";
 
-export const PASS_THRESHOLD = 4;
+/** Passing score for a quiz: 80% of its questions, so 4/5 for a lesson and 12/15 for a practice exam. */
+export function passThreshold(questionCount: number) {
+  return Math.ceil((questionCount * 4) / 5);
+}
 
 export const modules: Module[] = [
   {

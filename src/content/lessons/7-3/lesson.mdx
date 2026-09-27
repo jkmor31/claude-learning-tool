@@ -1,0 +1,76 @@
+## Why drill anti-patterns
+
+On most exam items, two options can be ruled out quickly, and the score comes down to the last two. The wrong option in that pair is almost always a familiar **anti-pattern**: something that sounds reasonable and would even help a little, but doesn't fix the cause or can't give the guarantee the question asks for.
+
+The same dozen anti-patterns come up again and again across all five domains, so learning to recognize them by family is the fastest way to eliminate options. This lesson catalogs them. The quiz mixes the two ways you'll use this: picking the right approach, and **spotting the anti-pattern** among several proposals. Read the question stem carefully, because the polarity changes from item to item.
+
+## The families
+
+| Family | What it sounds like | Why it fails | Pick instead |
+|---|---|---|---|
+| **Prompt for a guarantee** | "Make the instruction mandatory", "add it in capitals" | Prompts are probabilistic; some calls will slip through | Hooks, prerequisite gates, schemas, tool scoping |
+| **Self-reported confidence** | "Escalate when the model's confidence is below 7" | Uncalibrated; the model is often confident exactly when it's wrong | Explicit criteria; confidence only when calibrated on labeled data |
+| **Wrong proxy** | "Escalate on negative sentiment", "prioritize by volume" | Measures something that doesn't track the real need | Criteria based on the actual decision (policy gap, request, progress) |
+| **Bigger hammer** | "Larger context window", "bigger model", "more retries" | Doesn't change organization, attention or missing information | Structure the context, fix the input, stop retrying the unfixable |
+| **Over-engineering first** | "Train a classifier", "add a routing layer" | Costly, and skips the cheap fix that addresses the cause | Descriptions, criteria, examples first |
+| **Symptom downstream** | "Improve the synthesis agent" when the coordinator mis-assigned work | The cause is upstream, so the fix doesn't hold | Trace to the stage that caused it |
+| **Silent suppression** | "Return an empty result as success", "catch and continue" | Hides failures and produces false conclusions | Structured errors; tell access failures from empty results |
+| **All-or-nothing failure** | "Terminate the workflow on any error" | Throws away the work that succeeded | Continue with partial results, annotate the gaps |
+| **Arbitrary selection** | "Pick the better-known source", "average the two figures" | Hides evidence or invents a number | Show both, attributed, with context |
+| **Everything up front** | "Read every file first", "put all docs in the system prompt" | Floods context, and buries what matters in the middle | Incremental exploration, catalogs, subagents |
+| **Shift the burden** | "Make developers split PRs", "ask the customer to repeat" | Moves the system's job onto people | Fix the system's structure |
+| **Nonexistent feature** | `CLAUDE_HEADLESS=true`, `--batch`, `.claude/config.json` | Doesn't exist | The documented flag, file or setting |
+
+## By domain
+
+A quick reference to the forms these take in each domain:
+
+**Domain 1: Agentic Architecture**
+- Ending the loop by parsing text or with a fixed iteration count, instead of `stop_reason`.
+- Assuming subagents inherit the coordinator's context; passing findings as prose.
+- Spawning independent subagents one per turn.
+- Step-by-step procedures for subagents instead of goals and quality criteria.
+- A fixed pipeline for open-ended work, or dynamic replanning for a routine sequence.
+- Resuming a session whose tool results are stale without telling it what changed.
+
+**Domain 2: Tool Design & MCP**
+- Minimal tool descriptions; removing a built-in instead of describing the better tool.
+- Generic "Operation failed" errors; retrying non-retryable errors.
+- Giving every agent every tool; generic tools where a constrained one fits.
+- `tool_choice: "auto"` when a tool call is required.
+- Secrets in `.mcp.json`; personal servers in project scope; building a custom server for a standard system.
+- Grep for file names, Glob for contents, retrying Edit on a non-unique anchor.
+
+**Domain 3: Claude Code**
+- Team conventions in a user-level file; project commands in `~/.claude/commands/`.
+- Relying on Claude to infer which section of a huge `CLAUDE.md` applies, instead of path rules.
+- Plan mode for trivial fixes, or direct execution for known architectural work.
+- Prose-only descriptions for transformations that examples would pin down.
+- Interactive mode in CI, free-text output parsed with regex, same-session self-review.
+
+**Domain 4: Prompts & Structured Output**
+- "Be conservative" instead of categorical criteria.
+- JSON requested in the prompt instead of tool use with a schema.
+- Required fields for information that may be missing; closed enums with no `"other"` or `"unclear"`.
+- Treating schema validity as correctness; generic retry messages; retrying absent information.
+- Batches for blocking workflows; resubmitting whole batches; relying on result order instead of `custom_id`.
+- One pass over a large review; majority voting as the main precision fix.
+
+**Domain 5: Context & Reliability**
+- Progressive summaries as the only memory of amounts, dates and promises.
+- Keeping verbose tool output verbatim; long inputs with key findings buried in the middle.
+- Sentiment or self-rated confidence as escalation triggers; heuristic picks among multiple matches.
+- Automating on aggregate accuracy without checking each segment.
+- Dropping sources, dates or methodology during synthesis.
+
+## Using this on the exam
+
+When you're down to two options, ask of each: **does this belong to one of the families above?** If one does and the other doesn't, you have your answer. If both seem sound, go back to the qualifier: "first step" favors the simpler fix, "guarantee" favors the deterministic one, and "most maintainable" favors the one that scales without manual upkeep.
+
+<KeyTakeaways>
+
+- Most wrong answers belong to about a dozen **anti-pattern families**. Learn the families, not a list of answers.
+- The most common are **prompting for a guarantee**, **self-reported confidence**, **bigger hammers**, **over-engineering first**, **fixing the symptom downstream** and **silent suppression**.
+- When two options remain, eliminate the one that matches a family, then use the **qualifier** to decide between whatever's left.
+
+</KeyTakeaways>
