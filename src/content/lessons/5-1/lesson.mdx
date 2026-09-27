@@ -1,0 +1,95 @@
+## Long conversations forget the details that matter
+
+Domain 5 (15% of the exam) is about **reliability**: keeping agents accurate as conversations get long, work gets handed off, and things go wrong. It starts with a problem every long-running support or research agent hits: **the conversation outgrows the context window, and the facts that matter most are the first to get blurred.**
+
+## Why a model "remembers" at all
+
+The Messages API is **stateless**. The model doesn't remember your last request. Every call must include the **complete conversation history** you want it to consider. An agent that sends only the latest customer message will lose the thread instantly: "Yes, that one" means nothing without the turns before it. Passing the full history is what makes a conversation coherent (Lesson 1.1 relied on the same fact for the agentic loop).
+
+The catch is that history grows. A 90-minute support session with a dozen tool lookups can exceed the context window, or become so long that it's expensive and hard for the model to use well. Something has to be shortened.
+
+## The trap: progressive summarization
+
+The usual fix is to **summarize older turns**: replace 40 messages with a paragraph and keep going. Do it repeatedly, and each summary is summarized again. That's **progressive summarization**, and the guide names its specific risk: it **condenses numbers, percentages, dates, and customer-stated expectations into vague summaries.**
+
+```text
+Turn 6 (original):
+  "Order 88213 was charged $412.37 on March 3. The customer
+  says they were promised a refund by Friday, March 14, and
+  will dispute the charge with their bank if it isn't
+  processed by then."
+
+After two rounds of summarization:
+  "Customer has a billing issue with a recent order and
+  wants a refund soon."
+```
+
+Every fact the agent needs to act correctly is gone: the order number, the amount, the date, the deadline, and the threat to dispute. The summary is *accurate*, but it's no longer *useful*. Summaries preserve the gist, while transactions depend on specifics.
+
+## The fix: a persistent "case facts" block
+
+The guide's pattern: **extract transactional facts (amounts, dates, order numbers, statuses) into a persistent "case facts" block that's included in every prompt, outside the summarized history.**
+
+```text
+<case_facts>
+customer_id: C-20481 (verified)
+order: 88213
+charge: $412.37 on 2026-03-03
+requested: full refund
+promised_by: 2026-03-14 (per earlier agent, customer-stated)
+customer_expectation: will dispute with bank if not
+  processed by 2026-03-14
+status: refund pending approval (ticket R-5519)
+</case_facts>
+
+<conversation_summary>
+...older turns, summarized...
+</conversation_summary>
+
+...recent turns, verbatim...
+```
+
+The prompt now has three layers:
+
+1. **Case facts**: exact, structured, never summarized. Updated in place as facts change (the status moves from "pending approval" to "approved").
+2. **Summarized history**: the gist of older turns, where vagueness is acceptable.
+3. **Recent turns**: verbatim, so the immediate back-and-forth is intact.
+
+Summarization can compress layer 2 as much as it likes; layer 1 is never touched by it. The code that maintains the facts block can be as simple as a small extraction step (Lesson 4.4) after each turn that updates the structured record.
+
+## Multi-issue sessions: a separate context layer per issue
+
+Customers often raise several problems in one conversation: a late order, a double charge, and an address change. Mixing all of them in one narrative makes it easy to apply one issue's amount to another, or to lose track of which one is resolved. The guide's pattern: **extract structured issue data (order IDs, amounts, statuses) into a separate context layer.**
+
+```text
+<open_issues>
+- issue 1: order 88213, late delivery, status: tracking sent
+- issue 2: order 90117, charged twice ($59.00 x2),
+    status: refund approved, R-5520
+- issue 3: shipping address change for future orders,
+    status: waiting for customer to confirm new address
+</open_issues>
+```
+
+The agent can see at a glance what's open, and resolving one issue doesn't blur another.
+
+<Callout type="note" title="Real-world note: compaction">
+Claude Code and the Agent SDK **compact** long conversations automatically, and Claude Code offers `/compact`, which accepts instructions on what to keep. Compaction is a form of summarization, so the same risk applies. Anything that must survive exactly belongs in something compaction doesn't rewrite: a persistent facts block your code injects, a file the agent maintains, or `CLAUDE.md` for standing instructions.
+</Callout>
+
+## How this shows up on the exam
+
+- **"Later in long sessions, the agent gets amounts, dates, or promised deadlines wrong"** → progressive summarization lost the specifics; add a **persistent case-facts block** outside the summarized history.
+- **"Details of several issues get mixed up in one session"** → a **separate structured issue layer**, one entry per issue.
+- **"The agent forgets what the customer said two turns ago"** → the **full conversation history** isn't being passed on each request.
+- Distractors: bigger context windows, "summarize more carefully," or telling the model to "remember important details."
+
+<KeyTakeaways>
+
+- The API is stateless: pass the **complete conversation history** on every request.
+- **Progressive summarization** turns numbers, dates, percentages, and customer expectations into vague phrases.
+- Keep transactional facts in a **persistent case-facts block**, included in every prompt, **outside** the summarized history.
+- For multi-issue sessions, keep **structured issue data** (IDs, amounts, statuses) in a separate context layer.
+- Compaction is summarization too. Anything that must survive exactly needs its own place.
+
+</KeyTakeaways>

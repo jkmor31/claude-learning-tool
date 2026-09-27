@@ -1,0 +1,114 @@
+## Knowing when to hand off
+
+A support agent that escalates too often is expensive and useless: humans end up doing the work anyway. One that escalates too rarely is dangerous: it improvises refunds outside policy, argues with customers who asked for a person, and guesses which account a caller means. Task Statement 5.2 is about drawing that line precisely, and about resolving ambiguity by **asking** rather than **guessing**.
+
+Lesson 1.6 covered **how** to hand off (a structured handoff the human can act on). This lesson covers **when**.
+
+## The three real escalation triggers
+
+The guide names three appropriate triggers:
+
+| Trigger | Example |
+|---|---|
+| **The customer asks for a human** | "I want to talk to a person." |
+| **A policy exception or gap** | The request isn't covered by policy, or needs an exception to it |
+| **No meaningful progress is possible** | The needed system is down, or the agent has tried the available approaches and is stuck |
+
+Note what's **not** on the list: "the case is complex." A complex case that policy covers, such as a multi-order refund with partial shipments, is exactly what the agent is for. **Policy gaps**, not complexity, are the trigger.
+
+## Explicit requests: honor them immediately
+
+When a customer **explicitly asks for a human**, escalate **right away**, without first trying to investigate or solve the problem. It's tempting to "just check one thing first," but the customer has already stated what they want, and making them argue for it turns a mildly annoyed customer into an angry one.
+
+Contrast that with a customer who's **frustrated but hasn't asked for a person**:
+
+```text
+Customer: "This is the third time I've asked about this
+refund. Ridiculous."
+
+Good: "I'm sorry you've had to follow up three times;
+that's frustrating. I can see the refund for order 88213
+was approved but never sent to your bank. I can release it
+now, and it'll arrive in 3-5 business days. Want me to do
+that?"
+```
+
+The guide's pattern: **acknowledge the frustration and offer resolution when the issue is within the agent's capability, and escalate only if the customer reiterates** that they want a human. Frustration alone isn't a request for a person, and many frustrated customers would rather have the problem fixed in the next minute than wait for a queue.
+
+## Policy gaps: escalate what policy doesn't cover
+
+The subtle trigger is a request the policy is **ambiguous or silent** about. The guide's example: a customer asks the agent to **match a competitor's price**, but the price-adjustment policy only covers **adjustments to the site's own prices** (a price drop within 14 days of purchase).
+
+The agent shouldn't:
+
+- **Approve it**, stretching "price adjustment" to cover competitors. That creates a precedent nobody authorized.
+- **Flatly deny it**, as if the policy said no. It doesn't say no; it doesn't address competitors at all.
+
+It should **escalate**: a human with authority decides whether competitor matching is allowed. Policy gaps are business decisions, not agent decisions.
+
+## Unreliable triggers: sentiment and self-confidence
+
+Two tempting automatic triggers are unreliable **proxies for how complex a case really is**:
+
+- **Sentiment-based escalation** ("escalate when the customer sounds angry"). Anger tracks the customer's experience, not whether the agent can solve the problem. An angry customer with a simple, fixable issue gets bounced to a queue, while a calm customer with a genuine policy gap gets an improvised answer.
+- **Self-reported confidence** ("escalate when your confidence is below 70%"). The model's stated confidence isn't well calibrated to whether a case falls outside policy. It can be confidently wrong about a gap, or unsure about a routine case.
+
+Both measure something **nearby**, but not the thing that matters.
+
+## Say it with examples
+
+How do you get an agent to apply these triggers consistently? The same way Module 4 taught: **explicit escalation criteria plus few-shot examples** in the system prompt, **demonstrating when to escalate and when to resolve autonomously**.
+
+```text
+Escalate when:
+- The customer asks for a human (do this immediately).
+- The request needs a policy exception, or policy doesn't
+  address it.
+- You cannot make progress (system down, options exhausted).
+Do NOT escalate only because the customer is upset or the
+case has many steps.
+
+Example: "Can you match Store X's price?" Policy covers only
+our own price drops. -> Escalate: policy is silent on
+competitor matching.
+
+Example: "Third time asking, where's my refund?!" The refund
+is approved but unsent, and you can release it. -> Resolve:
+acknowledge, release it, confirm. Escalate only if they
+still ask for a person.
+```
+
+## Ambiguous matches: ask, don't guess
+
+A related reliability rule: when a lookup returns **multiple matches**, the agent must **ask for another identifier**, not pick one using a heuristic.
+
+```text
+get_customer(name="Sam Rivera") -> 3 matches
+
+Wrong: pick the most recent account, or the one in the
+       customer's area code.
+Right: "I found more than one account under that name.
+       Could you confirm the email address or the ZIP code
+       on the account?"
+```
+
+Guessing risks disclosing one customer's data to another, or refunding the wrong account. The cost of one clarifying question is tiny by comparison. Put this rule explicitly in the agent's instructions.
+
+## How this shows up on the exam
+
+- **"Customer explicitly asks for a human"** → escalate **immediately**, without investigating first.
+- **"Customer is frustrated, but the issue is fixable"** → acknowledge, offer the fix, and escalate only if they **reiterate** the request.
+- **"Request that policy doesn't address"** (competitor price match) → **escalate**; don't stretch the policy or deny it.
+- **"Escalate based on sentiment or confidence scores"** → unreliable proxies; use **explicit criteria plus few-shot examples**.
+- **"Lookup returns multiple customers"** → ask for **additional identifiers**; never pick heuristically.
+
+<KeyTakeaways>
+
+- Real escalation triggers: a **customer request for a human**, **policy exceptions or gaps**, and **inability to make progress**, not complexity alone.
+- Honor explicit requests for a human **immediately**.
+- For frustrated customers with solvable issues, **acknowledge and offer resolution**; escalate if they **reiterate**.
+- **Sentiment** and **self-reported confidence** are unreliable proxies for case complexity.
+- Put **explicit criteria with few-shot examples** in the system prompt.
+- On **multiple matches**, ask for more identifiers; don't choose by heuristic.
+
+</KeyTakeaways>

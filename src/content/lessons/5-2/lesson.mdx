@@ -1,0 +1,93 @@
+## Not all context is equal
+
+Lesson 5.1 was about keeping the right facts **in** context. This lesson is about two quieter problems: **where** information sits in a long input affects whether it's used, and a lot of what fills context is **noise** that crowds out what matters. Both come from the rest of Task Statement 5.1.
+
+## Position effects: "lost in the middle"
+
+Models reliably use information at the **beginning** and **end** of long inputs, but may **overlook findings in the middle**. That's the "lost in the middle" effect. Give a synthesis agent 12 research reports concatenated in a row, and findings from reports 5 through 8 are the most likely to be missing from its summary, even though they're right there in context.
+
+You can't make the middle go away, but you can design around it. The guide's two techniques:
+
+1. **Put a key-findings summary at the beginning** of aggregated inputs. The most important points appear in the high-attention position, however long the details that follow are.
+2. **Organize detailed results with explicit section headers.** Clear structure makes each part findable, instead of one undifferentiated wall of text.
+
+```text
+## Key findings (read first)
+1. Two of five studies found no effect in patients over 65.
+2. The largest trial (n=4,200) was industry-funded.
+3. No study measured outcomes beyond 12 months.
+
+## Source 1: Okafor et al. 2025 (RCT, n=4,200)
+...
+## Source 2: Lindqvist 2024 (cohort, n=880)
+...
+## Source 5: Park and Aziz 2023 (RCT, n=310)
+...
+```
+
+The key findings sit where attention is strongest, and the headers turn the middle into labeled sections that the model (and any human reader) can navigate.
+
+## Tool results pile up
+
+Every tool result stays in the conversation, and tool results are often **far bigger than their useful content**. The guide's example: an order lookup returns **40+ fields**, of which only **5** matter for the current task. A return-processing conversation that looks up six orders carries 240 fields of warehouse codes, internal flags and audit timestamps, all consuming tokens and competing for attention with the handful of fields that decide the case.
+
+The fix: **trim verbose tool output to the relevant fields before it accumulates in context.**
+
+```text
+Raw lookup_order result (excerpt of 43 fields):
+  order_id, customer_id, created_at, updated_at, channel,
+  warehouse_id, picker_id, pack_station, carrier_code,
+  fraud_score, tax_region, promo_codes, gift_wrap, ...
+
+Kept for a returns agent:
+  order_id, delivered_at, items (sku, qty, price),
+  return_window_ends, return_eligible
+```
+
+Where to trim:
+
+- **In the tool itself**: return a task-specific view, or accept a `fields` parameter.
+- **In a PostToolUse hook** (Lesson 1.7): rewrite the result before the model sees it, when you don't control the tool.
+- **By role**: a returns agent and a fraud agent need different fields from the same lookup. Trim per role, not globally.
+
+## Handoffs between agents: structure over prose
+
+The same logic applies when one agent's output becomes another agent's input. A research subagent that returns 3,000 words of narrative, including its reasoning, dead ends and hedges, forces a downstream synthesis agent to spend its limited context digging for the facts.
+
+The guide's two practices:
+
+- **Modify upstream agents to return structured data** (key facts, citations, relevance scores) **instead of verbose content and reasoning chains**, when downstream agents have limited context budgets.
+- **Require subagents to include metadata** (dates, source locations, methodological context) in their structured outputs, so downstream synthesis can weigh and attribute findings correctly.
+
+```json
+{
+  "claim": "No effect observed in patients over 65",
+  "source": "Lindqvist 2024, Table 3",
+  "date": "2024-06",
+  "method": "retrospective cohort, n=880",
+  "relevance": 0.9
+}
+```
+
+A record like this is small, ready to use, and carries what synthesis needs to judge it: when it was published, where exactly it came from, and how strong the evidence is. A finding without its date or method can't be weighed against a conflicting finding. That's why Lesson 1.5's structured claim records exist, and Lesson 5.7 builds on them.
+
+<Callout type="note" title="Real-world note: tools that manage context for you">
+Current platforms add features for this problem, such as clearing old tool results from context automatically, and Claude Code's subagents keep their tool output out of the main conversation. They help, but they don't replace the design choices here: a tool that returns 43 fields when 5 matter is still wasting tokens until something clears it.
+</Callout>
+
+## How this shows up on the exam
+
+- **"The synthesis misses findings from the middle of a long input"** → put a **key-findings summary at the start** and use **explicit section headers**.
+- **"Context fills up with order lookups and the agent loses track"** → **trim tool output** to the relevant fields before it accumulates.
+- **"The downstream agent has a small context budget and gets verbose reports"** → have upstream agents return **structured data** (key facts, citations, relevance scores).
+- **"Synthesis can't tell which finding is newer or stronger"** → require **metadata** (dates, source locations, methodology) in subagent outputs.
+
+<KeyTakeaways>
+
+- **Lost in the middle**: the beginning and end of long inputs are processed reliably; the middle may be overlooked.
+- Put **key findings first**, and organize details under **explicit section headers**.
+- Tool results **accumulate** and cost tokens out of proportion to their relevance, so **trim to the relevant fields** early.
+- When downstream context is limited, upstream agents should return **structured facts, citations and relevance scores**, not reasoning chains.
+- Require **dates, source locations and methodology** in subagent outputs so synthesis can weigh findings.
+
+</KeyTakeaways>

@@ -1,0 +1,101 @@
+## Failures travel upward
+
+In a multi-agent system, a failure in one subagent rarely stays there. A search subagent can't reach a database; what the coordinator hears about it, and what the final report says, determines whether the system **recovers gracefully** or **quietly produces a wrong answer**. Lesson 2.2 covered errors at the **tool** level (`isError`, error categories). Task Statement 5.3 is about the next level up: how errors **propagate across agents**.
+
+## What the coordinator needs to know
+
+A coordinator can only make a good recovery decision if the subagent tells it enough. The guide lists four pieces of **structured error context**:
+
+| Field | Why the coordinator needs it |
+|---|---|
+| **Failure type** | A timeout, a permission denial and a malformed query each call for a different response |
+| **What was attempted** | So it doesn't retry the exact same thing, and can try a different angle |
+| **Partial results** | Work that succeeded before the failure can still be used |
+| **Potential alternatives** | Another source, a narrower query, or a different tool the subagent knows could work |
+
+```json
+{
+  "status": "partial_failure",
+  "failure_type": "timeout",
+  "attempted": "clinical_trials_db: drug X cardiac 2020-2026",
+  "partial_results": [
+    { "trial": "NCT0441", "finding": "no cardiac signal" }
+  ],
+  "coverage": "2020-2022 searched; 2023-2026 not reached",
+  "alternatives": ["retry with date range 2023-2026 only",
+                   "query the FDA adverse events API"]
+}
+```
+
+With this, the coordinator can re-delegate just the missing date range, try the alternative source, or proceed and clearly mark the gap. Compare the generic version.
+
+## Generic errors hide the useful part
+
+```json
+{ "status": "error", "message": "search unavailable" }
+```
+
+"Search unavailable" tells the coordinator that something went wrong, and nothing else. Was it a timeout worth retrying, or a permission problem that never will succeed? Did half the search finish? Is there another source? A generic status **hides exactly the context the coordinator needs**, so it's left to choose between retrying blindly and giving up.
+
+## Empty isn't the same as failed
+
+The most consequential distinction here:
+
+- **Access failure**: the query **didn't run** (a timeout, a connection refusal, an auth error). You know nothing about the answer. The coordinator must decide about retries or alternatives.
+- **Valid empty result**: the query **ran successfully** and found **no matches**. That's a real answer: "there are no trials reporting cardiac outcomes."
+
+Mix them up and the damage is serious. If a timeout is reported as "no results," the final report will state that **no evidence exists**, when in fact nobody looked. The subagent's output must make the difference explicit, with a status for failures and a successful status with an empty result set for real empties.
+
+## Two anti-patterns at opposite ends
+
+<Callout type="warning" title="Silent suppression">
+Returning an empty result, marked as success, when the search actually failed. The workflow keeps running, and the report confidently says there's nothing to find. It looks robust and is actually misinformation.
+</Callout>
+
+<Callout type="warning" title="Terminating the whole workflow">
+Aborting the entire research task because one of eight sources timed out. Seven subagents' good work is thrown away, and the user gets nothing instead of a slightly incomplete, clearly labeled answer.
+</Callout>
+
+The right place is between them: **surface the failure with structure, keep the partial work, and let the coordinator decide.**
+
+## Recover locally first, propagate what's left
+
+Not every failure should reach the coordinator. A subagent that hits a **transient** error, such as one timeout or one rate-limit response, should **retry locally** (with backoff, a limited number of times) before reporting anything. The coordinator shouldn't be pulled into every network blip.
+
+The guide's rule: **subagents implement local recovery for transient failures, and only propagate errors they can't resolve**, including **what was attempted and any partial results**. The coordinator sees fewer errors, and each one it does see arrives with enough context to act on.
+
+## Coverage annotations in the final output
+
+Errors that can't be resolved shouldn't vanish from the final report either. The guide's practice: **structure synthesis output with coverage annotations** showing which findings are **well-supported** and which topic areas have **gaps due to unavailable sources**.
+
+```text
+Cardiac outcomes
+  Well supported: 6 trials (2020-2022), consistent finding
+  of no cardiac signal.
+  GAP: 2023-2026 trials not searched (database timeout);
+  conclusions may not reflect recent studies.
+
+Liver outcomes
+  Well supported: 9 trials plus the FDA adverse events data.
+```
+
+A reader can now trust the well-supported sections and treat the gap appropriately, instead of assuming the report covered everything.
+
+## How this shows up on the exam
+
+- **"The coordinator can't decide how to recover"** → subagents return **failure type, what was attempted, partial results and alternatives**, not a generic status.
+- **"The report says no evidence exists, but the search had timed out"** → distinguish **access failures** from **valid empty results**.
+- **"One source failed and the whole task aborted"** or **"errors were swallowed as success"** → both anti-patterns; propagate structured errors and continue.
+- **"Too many transient errors reach the coordinator"** → **local recovery** in the subagent; propagate only what it can't resolve.
+- **"The final report hides which parts are incomplete"** → **coverage annotations**.
+
+<KeyTakeaways>
+
+- Propagate **structured error context**: failure type, what was attempted, partial results, and alternatives.
+- **Generic statuses** like "search unavailable" hide what the coordinator needs to recover.
+- Distinguish **access failures** (the query didn't run) from **valid empty results** (it ran and found nothing).
+- **Silently suppressing** errors and **terminating the whole workflow** are both anti-patterns.
+- Subagents **recover locally** from transient failures and propagate only unresolved errors, with their partial results.
+- Final output carries **coverage annotations**: well-supported findings vs gaps from unavailable sources.
+
+</KeyTakeaways>
