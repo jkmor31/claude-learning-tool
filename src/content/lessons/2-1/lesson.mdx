@@ -1,3 +1,5 @@
+import { ToolRouting } from "./diagrams/ToolRouting";
+
 ## Welcome to Module 2
 
 Module 1 was about how agents are organized: loops, coordinators, subagents, hooks, and sessions. Module 2 (18% of the exam) is about the **tools** those agents use. It covers how tools are described, how they report failure, how they're distributed across agents, and how they're connected through the **Model Context Protocol (MCP)**.
@@ -68,6 +70,10 @@ search_tickets = {
     },
 }
 ```
+
+<Figure caption="Stating what each tool is for, and what it isn't for, turns a coin flip into a clear choice.">
+  <ToolRouting />
+</Figure>
 
 Each part does a job:
 

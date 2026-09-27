@@ -1,3 +1,5 @@
+import { ErrorRecovery } from "./diagrams/ErrorRecovery";
+
 ## Errors are information
 
 When a tool fails, the agent has to decide what to do next: retry, fix its input, explain the situation to the user, try another route, or escalate. It can only decide well if the tool tells it **what kind of failure** happened. Task Statement 2.2 covers how MCP tools should report errors so the agent can recover sensibly.
@@ -73,6 +75,10 @@ A transient failure looks different:
 ```
 
 With these fields, the agent's decision becomes simple and dependable: **retry** if `isRetryable` is true, **fix the input** for `validation`, **explain `customerMessage`** for `business`, and **stop and escalate** for `permission`. The `customerMessage` field matters because it lets the agent explain a policy accurately and politely, instead of making up a reason or exposing internal error codes.
+
+<Figure caption="isError separates failures from answers; errorCategory then picks the recovery.">
+  <ErrorRecovery />
+</Figure>
 
 ## Empty results aren't errors
 

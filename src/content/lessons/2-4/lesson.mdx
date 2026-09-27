@@ -1,3 +1,6 @@
+import { ToolChoiceOutcomes } from "./diagrams/ToolChoiceOutcomes";
+import { ForceThenAuto } from "./diagrams/ForceThenAuto";
+
 ## Who decides whether a tool gets called?
 
 Normally, Claude decides for itself whether to call a tool and which one. Most of the time that's what you want. But some workflows need more control: an extraction pipeline that must always return structured data rather than chat, or a process where one particular tool must run first. The API's **`tool_choice`** parameter provides that control, and it's the second half of Task Statement 2.3.
@@ -18,6 +21,10 @@ The key contrast to remember:
 - **`auto`: the model *may* return text instead of calling a tool.**
 - **`any`: the model *must* call a tool, but chooses which.**
 - **Forced: the model *must* call the specific tool you name.**
+
+<Figure caption="Each setting narrows what a response may contain; only auto allows both text and any tool.">
+  <ToolChoiceOutcomes />
+</Figure>
 
 ## "any": guarantee a tool call, let the model pick
 
@@ -60,6 +67,10 @@ follow_up = client.messages.create(
 ```
 
 That's the pattern in the guide: **use forced selection to ensure a specific tool is called first, then process subsequent steps in follow-up turns.**
+
+<Figure caption="Force only the step that must happen first; switching back to auto lets the loop end with end_turn.">
+  <ForceThenAuto />
+</Figure>
 
 <Callout type="warning" title="Don't force on every turn">
 If an agentic loop sends forced `tool_choice` (or `any`) on **every** request, the model can never answer with text, so it can never end with `end_turn`. The loop only stops at your iteration backstop, which Lesson 1.1 warned against relying on. Force the step that must happen, then switch back to `auto`.
