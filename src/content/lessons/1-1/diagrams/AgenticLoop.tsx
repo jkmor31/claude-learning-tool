@@ -8,7 +8,6 @@ export function AgenticLoop() {
       role="img"
       aria-labelledby="agentic-loop-title agentic-loop-desc"
       className="w-full max-w-[480px]"
-      style={{ maxWidth: 480 }}
     >
       <title id="agentic-loop-title">The agentic loop</title>
       <desc id="agentic-loop-desc">

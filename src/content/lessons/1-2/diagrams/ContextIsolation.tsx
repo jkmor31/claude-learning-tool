@@ -60,7 +60,6 @@ export function ContextIsolation() {
       role="img"
       aria-labelledby="context-isolation-title context-isolation-desc"
       className="w-full max-w-[480px]"
-      style={{ maxWidth: 480 }}
     >
       <title id="context-isolation-title">What a subagent’s context contains</title>
       <desc id="context-isolation-desc">

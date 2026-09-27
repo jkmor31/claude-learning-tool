@@ -1,22 +1,13 @@
+import { HookPipeline } from "./diagrams/HookPipeline";
+import { NormalizeOutputs } from "./diagrams/NormalizeOutputs";
+
 ## Hooks: code that runs inside the loop
 
 Lesson 1.6 used a `PreToolUse` hook as a prerequisite gate. This lesson covers hooks properly, the subject of Task Statement 1.5. A **hook** is your own code that the Agent SDK calls at specific points in the agentic loop. The two that matter most for the exam sit on either side of every tool call:
 
-```
-model requests a tool
-        |
-        v
-  PreToolUse hook  --deny-->  tool never runs; model gets the reason
-        | allow
-        v
-    tool executes
-        |
-        v
-  PostToolUse hook  -->  can replace the result the model sees
-        |
-        v
-  model reads the (possibly transformed) result
-```
+<Figure caption="PreToolUse can stop a call before it runs; PostToolUse can rewrite the result before the model reads it.">
+  <HookPipeline />
+</Figure>
 
 - **`PreToolUse`** runs **before** a tool executes. It can **allow**, **deny**, or **modify** the call. Use it to enforce rules on outgoing actions.
 - **`PostToolUse`** runs **after** a tool returns and **before the model sees the result**. It can **replace** the output or **add context**. Use it to clean up and normalize incoming data.
@@ -84,6 +75,10 @@ async def normalize_tool_output(input_data, tool_use_id, context):
 ```
 
 Registered with a matcher for the backend tools (MCP tools are named `mcp__<server>__<tool>`), every result the model reads now uses **one date format (ISO 8601, UTC)** and **human-readable statuses**.
+
+<Figure caption="Three backends, three formats: the hook turns them into one before the model reads any of them.">
+  <NormalizeOutputs />
+</Figure>
 
 <Callout type="note" title="API detail">
 The exact field names in hook input and output have changed between SDK versions. The tool's result appears as `tool_response` in the hooks reference and as `tool_output` in some Python type definitions. `updatedToolOutput` replaces output for any tool, while the older `updatedMCPToolOutput` is deprecated. A tool call that fails fires `PostToolUseFailure` instead of `PostToolUse`. Check the reference for your SDK version. The exam tests the **pattern**: transform in `PostToolUse` before the model processes the result.

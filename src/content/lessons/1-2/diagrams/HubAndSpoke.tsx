@@ -16,7 +16,6 @@ export function HubAndSpoke() {
       role="img"
       aria-labelledby="hub-and-spoke-title hub-and-spoke-desc"
       className="w-full max-w-[480px]"
-      style={{ maxWidth: 480 }}
     >
       <title id="hub-and-spoke-title">Hub-and-spoke coordinator</title>
       <desc id="hub-and-spoke-desc">

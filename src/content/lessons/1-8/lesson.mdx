@@ -1,3 +1,6 @@
+import { ReviewPasses } from "./diagrams/ReviewPasses";
+import { AdaptivePlan } from "./diagrams/AdaptivePlan";
+
 ## Two ways to break down a big task
 
 Large tasks can't be done well in one pass. A 20-file code review, a test suite for a legacy system, and a root-cause investigation are all too big or too uncertain for a single prompt. Task Statement 1.6 is about choosing **how** to split them up, and there are two broad strategies:
@@ -31,21 +34,9 @@ This is **attention dilution**. With that much material in a single pass, the mo
 
 The chain that fixes it:
 
-```
-            +----------+  +----------+       +----------+
-pass 1:     |  file 1  |  |  file 2  |  ...  |  file N  |  local issues,
-(per file)  +----+-----+  +----+-----+       +----+-----+  one file each
-                 |             |                  |
-                 +-------------+--------+---------+
-                                        v
-pass 2:                   +---------------------------+
-(integration)             | cross-file data flow,     |
-                          | interface mismatches,     |
-                          | inconsistent patterns     |
-                          +-------------+-------------+
-                                        v
-                                consolidated review
-```
+<Figure caption="Each file gets a focused pass of its own; a separate integration pass catches what no single file shows.">
+  <ReviewPasses />
+</Figure>
 
 1. **Per-file local passes.** Each file is reviewed on its own, getting full attention for local issues: logic errors, missing error handling, unsafe calls. These passes are independent, so they can run in parallel.
 2. **A cross-file integration pass.** A separate pass looks at how the files interact: a function whose signature changed in one file but not at its call sites, data validated in one layer but not another, conventions applied inconsistently. It gets the diffs plus the per-file findings, not a fresh read of everything.
@@ -69,6 +60,10 @@ The guide describes the adaptive approach in three moves:
 3. **Create a prioritized plan that adapts as dependencies are discovered.** Start with the highest-impact area, and **revise the plan** when work reveals something new.
 
 For example, adaptation might look like this. The plan starts with "test the payment service." Mapping shows the payment service reads config from a global singleton that opens a real database connection at import time. That discovery **creates a new first task**: introduce a test fixture or seam for the config. The plan reorders around it. A fixed chain has no way to react like that.
+
+<Figure caption="A finding made during the work creates a new first task, and the plan reorders around it.">
+  <AdaptivePlan />
+</Figure>
 
 The same pattern fits any **open-ended investigation**, such as debugging an intermittent failure, auditing an unfamiliar system, or researching a question whose shape is unclear. Each step's findings decide the next subtask.
 

@@ -50,7 +50,6 @@ export function ToolResultPairing() {
       role="img"
       aria-labelledby="tool-result-pairing-title tool-result-pairing-desc"
       className="w-full max-w-[448px]"
-      style={{ maxWidth: 448 }}
     >
       <title id="tool-result-pairing-title">Pairing tool_use and tool_result blocks</title>
       <desc id="tool-result-pairing-desc">

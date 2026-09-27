@@ -1,3 +1,6 @@
+import { StaleHistory } from "./diagrams/StaleHistory";
+import { SessionFork } from "./diagrams/SessionFork";
+
 ## Work that spans more than one sitting
 
 Real investigations don't finish in one session. You spend an afternoon having an agent map a legacy payments system, then you stop. Tomorrow you want to continue, or try two different refactoring approaches from the same analysis, or come back after a teammate has changed half the files. Task Statement 1.7 covers the tools for this and, more importantly, the judgment about which one to use:
@@ -49,6 +52,10 @@ Resuming gives the agent everything it learned before: which files matter, how t
 
 Suppose the agent analyzed 40 files yesterday, and overnight a teammate refactored 3 of them. The resumed session still contains the **old** contents of those 3 files in its tool results. Unless told otherwise, the agent will reason from the old versions: citing functions that were renamed, or trusting logic that was rewritten.
 
+<Figure caption="The session keeps what the agent read yesterday; only the 3 changed files need a fresh read.">
+  <StaleHistory />
+</Figure>
+
 The guide's fix: **tell the resumed session exactly what changed**, so it can re-analyze only those parts instead of re-exploring everything.
 
 > Since our last session, these files changed: `payments/gateway.py` (retry logic moved into a new `RetryPolicy` class), `payments/models.py` (the `Refund.amount` field is now in cents), and `tests/test_gateway.py`. Re-read those three before continuing. Everything else is unchanged.
@@ -88,11 +95,9 @@ Sometimes you don't want to continue one line of work. You want to compare two. 
 
 A **fork** creates a **new, independent session that starts with a copy** of the original's history. Each branch then goes its own way, and the original is left untouched:
 
-```
-                 +--> fork A: "plan mocking-based unit tests"
-shared analysis -+
-  (original)     +--> fork B: "plan containerized integration tests"
-```
+<Figure caption="A fork copies the conversation into a new session; the files underneath are still shared.">
+  <SessionFork />
+</Figure>
 
 In the Agent SDK you set `fork_session=True` (Python) or `forkSession: true` (TypeScript) alongside `resume`. In the CLI, you add `--fork-session` to `--resume`:
 

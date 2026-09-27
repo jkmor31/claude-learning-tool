@@ -1,3 +1,6 @@
+import { PrerequisiteGate } from "./diagrams/PrerequisiteGate";
+import { MultiConcernFlow } from "./diagrams/MultiConcernFlow";
+
 ## When "usually" isn't good enough
 
 Everything in Lessons 1.1–1.5 relied on the model's judgment: which tool to call, which subagent to spawn, when the work is done. That's the right default. But some rules can't be left to judgment:
@@ -75,6 +78,10 @@ Three things to notice:
 2. **The deny reason goes back to the model.** A blocked agent doesn't just fail: it reads "verify this customer with get_customer first," takes that step, and retries. The gate enforces the rule and also tells the model how to comply.
 3. **Keep the prompt guidance too.** The system prompt and tool descriptions should still explain the verification requirement, so the model usually gets the order right the first time. The gate catches the cases where it doesn't. Guidance keeps things efficient, and the gate keeps them safe.
 
+<Figure caption="The gate checks recorded state; a denial sends the model to verify first, and the retry passes.">
+  <PrerequisiteGate />
+</Figure>
+
 You can also put the check **inside the tool itself**, so `process_refund` refuses unverified customers in the backend. That's programmatic too, and for money-moving operations, doing both is reasonable defense in depth. Lesson 1.7 covers hooks in depth, including hooks that redirect blocked actions such as over-limit refunds to human escalation.
 
 ## Structured handoffs to humans
@@ -121,6 +128,10 @@ A common failure: the agent fixes the first issue, writes a friendly wrap-up, an
 2. **Establish shared context once:** verify the customer a single time, and use that verified ID for every item instead of re-verifying per issue.
 3. **Investigate each item in parallel**, with multiple tool calls in one response or parallel subagents for heavier work (Lesson 1.5).
 4. **Synthesize one unified resolution** that addresses every item, including any that need escalation. For example: "The replacement for 4417 ships tomorrow, the duplicate charge on 5102 has been refunded, your address is updated."
+
+<Figure caption="Verify once, investigate every item in parallel, then answer all of them in one reply.">
+  <MultiConcernFlow />
+</Figure>
 
 Decomposing up front means nothing gets forgotten. Shared context means the customer isn't asked to verify three times. Parallel investigation keeps the response fast. And a single synthesized reply lets the customer see that everything was handled.
 
