@@ -34,6 +34,10 @@ Scoping does three things:
 
 In the Agent SDK you implement this with each subagent's `tools` list (Lesson 1.4). With the raw API, send each call only the tools that agent needs.
 
+<Callout type="note" title="Real-world note: tool search for large libraries">
+For agents that really do need access to a large catalog, such as several MCP servers with hundreds of tools, the Claude API offers a **tool search tool**. You mark tools with `defer_loading: true`, and Claude searches the catalog and loads only the few it needs, which keeps selection accurate as the library grows. It solves the selection problem, not the misuse and blast-radius problems, so it doesn't replace scoping each agent to its role.
+</Callout>
+
 ## Replace generic tools with constrained ones
 
 Scoping is about *which* tools an agent gets. It also matters *how broad* each tool is. A generic tool like `fetch_url(url)` can fetch anything: internal admin pages, multi-gigabyte binaries, login-protected content, pages carrying prompt-injection text. Each of those is a place for things to go wrong.

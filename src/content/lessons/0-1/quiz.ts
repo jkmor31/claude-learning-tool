@@ -73,7 +73,7 @@ export const quiz: QuizQuestion[] = [
     ],
     correct: [1, 3],
     explanation:
-      "Uncalibrated self-assessment used as a gate (B) and infrastructure-first over-engineering (D) are two of the most common distractor patterns in the sample questions. A, C, and E are each the correct answer to an official sample question. One nuance: field-level confidence calibrated against a labeled validation set IS a legitimate technique (Task 5.5). The anti-pattern is trusting uncalibrated self-assessment.",
+      "Uncalibrated self-assessment used as a gate (B) and infrastructure-first over-engineering (D) are two of the most common distractor patterns in the sample questions. A and E match the correct answers to official sample questions, and C is the structured-error pattern the guide recommends (Task 2.2). One nuance: field-level confidence calibrated against a labeled validation set IS a legitimate technique (Task 5.5). The anti-pattern is trusting uncalibrated self-assessment.",
   },
 ];
 

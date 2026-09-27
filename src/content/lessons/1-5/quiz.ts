@@ -86,7 +86,7 @@ export const bonus: BonusScenario = {
     "Have the coordinator pass the complete, unmodified findings JSON to the synthesizer, and have the synthesizer cite findings by id, for example [F3].",
     "Write an attribution checker script that fails if the report cites an id that doesn't exist, cites a finding whose source file isn't in the corpus, or contains a sentence with a number but no citation.",
     "Parallelism: tell the coordinator to launch all independent researcher calls in one response. Record the wall-clock time from the first spawn to the last result.",
-    "For comparison, run a version whose coordinator is told to research one subtopic per turn, and record its time too.",
+    "For comparison, run a version whose coordinator is told to research one subtopic per turn and wait for each result before starting the next, and record its time too. Current SDKs run subagents in the background by default, so set CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 in the query's env for this run if the log shows the subagents overlapping.",
     "Goal vs procedure: write two coordinator prompts, one scripted with exact queries and one stating the goal and quality criteria. Delete the notes one scripted query depends on, then run both.",
   ],
   successCriteria: [

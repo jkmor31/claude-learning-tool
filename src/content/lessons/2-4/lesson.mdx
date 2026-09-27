@@ -67,7 +67,7 @@ If an agentic loop sends forced `tool_choice` (or `any`) on **every** request, t
 
 ## What tool_choice does and doesn't guarantee
 
-- `any` and forced selection guarantee **that a tool call happens**. Combined with a JSON input schema, they guarantee **well-formed, schema-shaped arguments**.
+- `any` and forced selection guarantee **that a tool call happens**. The arguments come back as parsed JSON shaped by the tool's input schema, so there are no JSON syntax errors to handle. For a hard guarantee that the arguments match the schema exactly, also set `strict: true` on the tool definition (strict tool use).
 - They **don't** guarantee the arguments are **correct**. A forced extraction can still put a value in the wrong field or produce line items that don't add up to the stated total. Validation and retry loops handle that (Lesson 4.6).
 - Forcing a tool doesn't make the model understand when it's appropriate. If the tool doesn't fit the input, forcing it produces a confident but meaningless call. Force only when the step is always valid.
 
@@ -84,7 +84,7 @@ Lesson 1.6 enforced order with a **prerequisite gate**: a hook that blocks `proc
 In a fixed pipeline, forcing the first step is simple and direct. In an open-ended agent, where you don't know which turn needs the rule, a gate enforces it wherever it comes up.
 
 <Callout type="note" title="Real-world note: model support">
-The exam tests `auto`, `any`, and forced selection as described here, and models such as Claude Opus 5 support all three. Some newer models, including Claude Fable 5.1 and Claude Opus 5.5, **reject** `any` and forced `tool` choices with an error. On those models, use `auto` with an explicit instruction naming the tool (and check that a call was made), `strict: true` on the tool for schema-valid arguments, or structured outputs when the forced call only existed to get JSON back. Check your model's documentation before relying on forced tool use.
+The exam tests `auto`, `any`, and forced selection as described here, and models such as Claude Opus 5 support all three. Some newer models, including Claude Fable 5.1, Claude Opus 5.5, and Claude Mythos 5.1, **reject** `any` and forced `tool` choices with a 400 error. Manual extended thinking (`thinking: {"type": "enabled"}`) rejects them on any model. On those models, use `auto` with an explicit instruction naming the tool (and check that a call was made), `strict: true` on the tool for schema-valid arguments, or structured outputs when the forced call only existed to get JSON back. Check your model's documentation before relying on forced tool use.
 </Callout>
 
 ## How this shows up on the exam
@@ -100,7 +100,7 @@ The exam tests `auto`, `any`, and forced selection as described here, and models
 - **`any`**: the model must call *a* tool of its choosing. Use it to guarantee structured output instead of chat, for example when choosing among several extraction schemas.
 - **Forced** `{"type": "tool", "name": "..."}`: the model must call *that* tool. Use it to guarantee a step, like `extract_metadata`, runs first, then return to `auto` for later turns.
 - Forcing on **every** turn prevents `end_turn`. Force only the step that must happen.
-- `tool_choice` guarantees **a call and well-formed arguments**, not **correct values**.
+- `tool_choice` guarantees **a call and well-formed arguments** (add `strict: true` for exact schema conformance), not **correct values**.
 - Real-world: some newer models reject `any` and forced choices, so check the docs and use `auto` with explicit instructions, `strict` tools, or structured outputs there.
 
 </KeyTakeaways>

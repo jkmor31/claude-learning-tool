@@ -8,6 +8,8 @@ In the Model Context Protocol, a tool result includes a content payload and an o
 
 That distinction matters. A tool that catches an exception and returns the error message as ordinary content, without `isError`, is asking the model to guess whether "Order service timed out" is data or a failure. Mark failures as failures.
 
+The MCP spec separates this from a **protocol error**, a JSON-RPC error for problems like an unknown tool name or a malformed request. Clients aren't required to show protocol errors to the model. Failures the model could act on, such as a backend timeout, a date in the wrong format, or a policy violation, belong in a normal tool result with `isError: true`, so the model sees them and can recover.
+
 But `isError` alone only says *that* something failed. The agent also needs to know *what kind* of failure, because different kinds need different responses.
 
 ## Four kinds of failure
@@ -41,7 +43,8 @@ Return the category, whether a retry could help, and a readable description. For
   "isError": true,
   "content": [{
     "type": "text",
-    "text": "{\"errorCategory\": \"business\", \"isRetryable\": false, ...}"
+    "text":
+      "{\"errorCategory\": \"business\", \"isRetryable\": false, ...}"
   }]
 }
 ```

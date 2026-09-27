@@ -72,7 +72,7 @@ def normalize_record(record: dict) -> dict:
 async def normalize_tool_output(input_data, tool_use_id, context):
     # Field name differs across SDK versions (see note below)
     raw = input_data.get("tool_response", input_data.get("tool_output"))
-    record = extract_json(raw)   # your helper: pull out the JSON payload
+    record = extract_json(raw)   # your helper: pull out the JSON
     if record is None:
         return {}                # leave unrecognized output unchanged
     return {
@@ -86,7 +86,7 @@ async def normalize_tool_output(input_data, tool_use_id, context):
 Registered with a matcher for the backend tools (MCP tools are named `mcp__<server>__<tool>`), every result the model reads now uses **one date format (ISO 8601, UTC)** and **human-readable statuses**.
 
 <Callout type="note" title="API detail">
-The exact field names in hook input and output have changed between SDK versions. The tool's result appears as `tool_response` in the hooks reference and as `tool_output` in some Python type definitions. `updatedToolOutput` replaces output for any tool, while the older `updatedMCPToolOutput` is deprecated. Check the reference for your SDK version. The exam tests the **pattern**: transform in `PostToolUse` before the model processes the result.
+The exact field names in hook input and output have changed between SDK versions. The tool's result appears as `tool_response` in the hooks reference and as `tool_output` in some Python type definitions. `updatedToolOutput` replaces output for any tool, while the older `updatedMCPToolOutput` is deprecated. A tool call that fails fires `PostToolUseFailure` instead of `PostToolUse`. Check the reference for your SDK version. The exam tests the **pattern**: transform in `PostToolUse` before the model processes the result.
 </Callout>
 
 Normalization isn't the only use. A `PostToolUse` hook can also **trim** a 40-field order record down to the handful of fields the agent needs (Lesson 5.2), **redact** sensitive values before they enter the conversation, or **add context** with `additionalContext`, for example "Note: this customer has an open fraud flag."
@@ -109,9 +109,10 @@ async def enforce_refund_limit(input_data, tool_use_id, context):
             "hookEventName": input_data["hook_event_name"],
             "permissionDecision": "deny",
             "permissionDecisionReason": (
-                f"Refunds over ${REFUND_LIMIT:.0f} need human approval. "
-                "Do not retry. Call escalate_to_human with the "
-                "customer ID, amount, root cause, and recommended action."
+                f"Refunds over ${REFUND_LIMIT:.0f} need human "
+                "approval. Do not retry. Call escalate_to_human "
+                "with the customer ID, amount, root cause, and "
+                "recommended action."
             ),
         }
     }

@@ -81,6 +81,10 @@ Each part does a job:
 
 Longer descriptions cost a few tokens. Wrong tool calls cost far more: wasted turns, wrong answers, and confused users.
 
+<Callout type="note" title="Real-world note: current tool-definition guidance">
+Anthropic's tool-use docs agree that detailed descriptions are the most important factor in tool performance, and suggest at least 3–4 sentences per tool. Two related options: an optional `input_examples` field on the tool definition shows schema-valid example inputs for tools with complex or format-sensitive parameters, and prefixing names by service (`github_list_prs`, `slack_send_message`) keeps large tool sets unambiguous. The docs also recommend **consolidating** closely related operations, like create, review, and merge a PR, into one tool with an `action` parameter. That doesn't conflict with the splitting advice below. Consolidate many tiny tools that do one job, and split a generic tool that does several unrelated jobs with unpredictable outputs.
+</Callout>
+
 ## Overlapping tools: rename, rewrite, or split
 
 When two tools genuinely overlap, better wording may not be enough. The guide gives two structural fixes.

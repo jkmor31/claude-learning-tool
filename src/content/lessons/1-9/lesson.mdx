@@ -68,7 +68,7 @@ The stale results don't disappear just because you add a note. They're still in 
 
 **Established (still valid):**
 - Refund flow: API -> RefundService -> Gateway -> ledger write
-- Failures correlate with gateway timeouts > 8s (logs, Mar 3–10)
+- Failures correlate with gateway timeouts > 8s (logs, Mar 3-10)
 
 **Ruled out:** database locking; ledger schema mismatches.
 
@@ -89,9 +89,9 @@ Sometimes you don't want to continue one line of work. You want to compare two. 
 A **fork** creates a **new, independent session that starts with a copy** of the original's history. Each branch then goes its own way, and the original is left untouched:
 
 ```
-                     +--> fork A: "plan a mocking-based unit test strategy"
-shared analysis -----+
-  (original)         +--> fork B: "plan a containerized integration strategy"
+                 +--> fork A: "plan mocking-based unit tests"
+shared analysis -+
+  (original)     +--> fork B: "plan containerized integration tests"
 ```
 
 In the Agent SDK you set `fork_session=True` (Python) or `forkSession: true` (TypeScript) alongside `resume`. In the CLI, you add `--fork-session` to `--resume`:

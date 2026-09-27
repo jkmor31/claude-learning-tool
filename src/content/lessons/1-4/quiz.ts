@@ -86,13 +86,13 @@ export const bonus: BonusScenario = {
     "Put the durable role in each definition's prompt: output format and citation rules. Put the assignment and its context in the delegation, which the coordinator writes.",
     "Configure the coordinator's allowed tools to include Agent (\"Task\" on older SDK versions, and in exam terms), plus the tools the subagents use.",
     "Log every spawn from the message stream: tool_use blocks named Agent or Task, with the subagent_type and the first 200 characters of the delegation prompt. Also log which messages carry a parent_tool_use_id.",
-    "Experiment 1: remove Agent from the allowed tools and rerun. Record what the coordinator does.",
+    "Experiment 1: remove Agent from the allowed tools and rerun, then add it to disallowed tools instead and rerun. Record what the coordinator does each time. (Current SDKs treat allowed tools as an auto-approve list, so only the disallowed run is guaranteed to block delegation. See the lesson's real-world note.)",
     "Experiment 2: delete the synthesizer's tools field and rerun. Record which tools it now has and whether it uses any of them.",
     "Experiment 3: change both descriptions to \"Helps with research tasks\" and rerun three times. Record any routing mistakes, then restore the descriptions.",
   ],
   successCriteria: [
     "The normal run's log shows the researcher spawned for the research subtasks and the synthesizer spawned once with the findings in its delegation prompt.",
-    "Your notes for the three experiments name the rule each one demonstrates: allowedTools needs the Task tool, omitting tools means inheriting all tools, and descriptions drive routing.",
+    "Your notes for the three experiments name the rule each one demonstrates: allowedTools needs the Task tool (the exam's rule) versus disallowedTools actually removing it (current SDK behavior), omitting tools means inheriting all tools, and descriptions drive routing.",
   ],
   stretchGoals: [
     "Define the same two subagents as Markdown files in .claude/agents/ and load them via the SDK's settings sources. Confirm that a programmatic definition with the same name takes precedence.",
