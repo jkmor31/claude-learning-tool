@@ -1,3 +1,6 @@
+import { ConflictAnnotateNotPick } from "./diagrams/ConflictAnnotateNotPick";
+import { DatesTurnConflictIntoTrend } from "./diagrams/DatesTurnConflictIntoTrend";
+
 ## Where did that number come from?
 
 A research system's report says "the market grew 18% last year." Which source says that? Is it the same source that reported 12% elsewhere in the report? Was the 18% measured last year or three years ago? If the report can't answer these questions, readers can't trust it, however polished it is.
@@ -49,9 +52,17 @@ Now the reader sees both values, who reported them, and the plausible reason the
 
 The same applies earlier in the pipeline: a document-analysis step should **complete its analysis with the conflicting values included and explicitly annotated**, and **let the coordinator decide how to reconcile them** before passing anything to synthesis. A subagent that silently picks one value has made an editorial decision it wasn't asked to make, and the evidence for the other value is gone.
 
+<Figure caption="Picking or averaging hides evidence; annotating both values with their sources shows why they differ.">
+  <ConflictAnnotateNotPick />
+</Figure>
+
 ## Dates prevent false contradictions
 
 Some "conflicts" aren't conflicts at all. A 2021 source says unemployment was 6.1%; a 2025 source says 4.2%. Without dates, that looks like two sources disagreeing. With dates, it's a trend. The guide: **require publication or data collection dates in structured outputs**, so **temporal differences aren't misread as contradictions.** Note both dates when they differ: a 2025 report can describe 2023 data.
+
+<Figure caption="With dates attached, an apparent contradiction reads as change over time.">
+  <DatesTurnConflictIntoTrend />
+</Figure>
 
 ## Structure the report around certainty
 

@@ -1,3 +1,6 @@
+import { CalibrationByField } from "./diagrams/CalibrationByField";
+import { ReviewRouting } from "./diagrams/ReviewRouting";
+
 ## Deciding what humans still need to check
 
 An extraction system that's "97% accurate" sounds ready to run without human review. It might be. It might also be failing badly on one kind of document that happens to be rare in your test set. Task Statement 5.5 is about the evidence you need before reducing human review, and how to spend limited reviewer time where it matters most.
@@ -36,6 +39,10 @@ Field: tax_id (validation set, n=2,000)
 
 Thresholds differ **per field**. A reported 0.9 on `total` might be very reliable while a 0.9 on `tax_id` isn't. Recalibrate when the model, prompt or document mix changes.
 
+<Figure caption="The same reported confidence means different accuracy per field, so each field gets its own calibrated threshold.">
+  <CalibrationByField />
+</Figure>
+
 ## Routing: where reviewers look
 
 Reviewer time is limited, so route deliberately. The guide says to send to human review:
@@ -60,6 +67,10 @@ Weekly audit sample of auto-accepted extractions:
 ```
 
 If the sampled error rate for a segment climbs above its bar, that segment goes back to fuller human review while you investigate.
+
+<Figure caption="Low-confidence and contradictory extractions go to people; auto-accepted work is still sampled, and a segment that slips goes back to review.">
+  <ReviewRouting />
+</Figure>
 
 <Callout type="exam" title="Automation is earned per segment">
 The exam's best answers treat reducing human review as something each **segment** earns with evidence: accuracy measured per document type and field, calibrated thresholds, and continued sampling. Answers that automate based on one overall accuracy number, or on raw uncalibrated confidence, are the distractors.
