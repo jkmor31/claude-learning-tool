@@ -20,6 +20,8 @@ const withMDX = createMDX({
     // --shiki-dark instead of one baked-in color; globals.css picks between
     // them with the same prefers-color-scheme query the rest of the theme uses.
     rehypePlugins: [
+      // Gives every heading an id so the lesson's "On this page" contents can link to it.
+      "rehype-slug",
       [
         "rehype-pretty-code",
         { theme: shikiTheme, defaultColor: false, keepBackground: false },
