@@ -1,3 +1,6 @@
+import { PartitionedScope } from "./diagrams/PartitionedScope";
+import { RefinementLoop } from "./diagrams/RefinementLoop";
+
 ## Where Lesson 1.2 left off
 
 Lesson 1.2 set up the architecture: a coordinator at the hub, isolated subagents on the spokes, and every handoff flowing through the coordinator. This lesson covers the rest of Task Statement 1.2, which is about how a good coordinator **uses** that architecture. It rests on three skills:
@@ -39,6 +42,10 @@ The guide's fix is to **partition the scope**, giving each subagent a distinct s
 - **By subtopic:** solar, wind, battery storage.
 - **By source type:** peer-reviewed research, industry reports, government statistics.
 
+<Figure caption="The same assignment three times buys the same sources three times; distinct slices buy distinct findings.">
+  <PartitionedScope />
+</Figure>
+
 Say the boundaries explicitly in each prompt. Subagents are isolated: they can't see each other's assignments, so an instruction like "avoid duplicating the other agents" gives them nothing to act on. Instead:
 
 > "Research **wind power** adoption trends from 2020 to 2025. Solar and battery storage are assigned to other researchers, so skip them unless a source compares them directly with wind."
@@ -58,15 +65,9 @@ Fixing one doesn't fix the other. Non-overlapping assignments can still leave ga
 
 Even a well-planned decomposition can come back uneven. One subtopic yields ten strong sources, another yields one weak blog post, and a key sub-question turns out to need its own investigation. A one-pass pipeline ships that unevenness. A **refinement loop** catches it:
 
-```
-decompose -> delegate searches/analysis -> synthesize
-                    ^                          |
-                    |                          v
-     targeted follow-up queries <- evaluate against coverage criteria
-                                               |
-                                               v
-                                  criteria met -> final result
-```
+<Figure caption="Gaps get targeted follow-ups, not reruns; hitting the backstop still reports what's missing.">
+  <RefinementLoop />
+</Figure>
 
 The guide describes it: the coordinator **evaluates synthesis output for gaps, re-delegates to search and analysis subagents with targeted queries, and re-invokes synthesis until coverage is sufficient.**
 

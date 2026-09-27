@@ -1,3 +1,6 @@
+import { HubAndSpoke } from "./diagrams/HubAndSpoke";
+import { ContextIsolation } from "./diagrams/ContextIsolation";
+
 ## From one agent to a team
 
 In Lesson 1.1 a single agent ran one loop with a handful of tools. That works until the task outgrows one context window. Consider the exam's **Multi-Agent Research System** scenario: search the web, analyze long documents, synthesize findings, and write a cited report. Put all of that in one agent and several problems pile up:
@@ -13,20 +16,9 @@ This lesson covers the architecture the exam expects for this split, **hub-and-s
 
 ## The hub-and-spoke shape
 
-```
-                +-----------------------+
-user <--------> |      COORDINATOR      |
-                | decompose, delegate,  |
-                | route, handle errors, |
-                | aggregate             |
-                +-----------+-----------+
-                            |
-      +--------------+------+-------+--------------+
-      |              |              |              |
-+-----+----+   +-----+----+   +-----+----+   +-----+----+
-|  search  |   | analyze  |   |synthesize|   |  report  |
-+----------+   +----------+   +----------+   +----------+
-```
+<Figure caption="Every task and result passes through the coordinator; subagents never talk to each other.">
+  <HubAndSpoke />
+</Figure>
 
 One **coordinator** sits at the hub. Each **subagent** is a spoke that talks only to the coordinator. The subagents never message each other. When the synthesis subagent needs search results, the coordinator collects them from the search subagent and passes them along.
 
@@ -68,6 +60,10 @@ The fact that causes the most multi-agent bugs: **subagents do not inherit the c
 - the prompt the coordinator writes when it invokes it.
 
 That's all. The subagent never saw the user's original message, earlier turns, other subagents' results, or anything the coordinator learned along the way, unless the coordinator explicitly put it in the prompt. Subagents also don't share memory between invocations: calling the same subagent twice gives you two separate conversations.
+
+<Figure caption="The delegation prompt is the only thing that crosses from the coordinator into a subagent.">
+  <ContextIsolation />
+</Figure>
 
 Here's the bug in its most common form. The user tells the coordinator: *"I've shared three vendor contracts. Focus on data-retention clauses for EU customers."* The coordinator delegates:
 

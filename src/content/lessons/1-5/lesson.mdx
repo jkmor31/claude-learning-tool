@@ -1,3 +1,6 @@
+import { AttributionHandoff } from "./diagrams/AttributionHandoff";
+import { ParallelTimeline } from "./diagrams/ParallelTimeline";
+
 ## The delegation prompt is the subagent's whole world
 
 Lesson 1.4 showed that a subagent receives exactly two things written for the job at hand: its own system prompt and the coordinator's **delegation prompt**. Everything specific to this task, including the user's goal, earlier findings, constraints, and sources, reaches the subagent only if the coordinator writes it into that prompt.
@@ -28,6 +31,10 @@ The guide's skill statement is direct: **include complete findings from prior ag
 ## Keep content separate from metadata
 
 Attribution disappears at handoffs. A search subagent writes, "According to a 2024 city report, Riverton opened 40 cooling centers." The coordinator paraphrases that into a summary for the synthesizer, and by the final report, "40 cooling centers" has no source, no date, and no URL. Each handoff dropped a little more.
+
+<Figure caption="Prose handoffs shed source metadata at every step; structured records carry it all the way to the report.">
+  <AttributionHandoff />
+</Figure>
 
 The fix is to pass findings as **structured records** that keep the claim and its provenance in separate fields:
 
@@ -73,12 +80,20 @@ The guide contrasts this with spawning them **across separate turns**, one Task 
 
 Sequential spawning adds up the durations. Parallel spawning takes about as long as the slowest one.
 
+<Figure caption="One Task call per turn adds the durations up; several Task calls in one response finish with the slowest.">
+  <ParallelTimeline />
+</Figure>
+
 When to parallelize:
 
 - **Parallelize independent work:** different subtopics, source types, files, or customer issues that don't need each other's results.
 - **Keep dependent work in order:** synthesis needs the research results, so it runs after the research finishes, not alongside it.
 
 If your coordinator spawns one subagent per turn when the subtasks are clearly independent, say so in its prompt: *"When subtasks don't depend on each other, launch all of them in the same response."* The results come back together, and the coordinator reasons over all of them at once.
+
+<Callout type="note" title="Real-world note: background subagents">
+Current Agent SDK releases run subagents in the **background** by default: an `Agent` call returns right away, the coordinator keeps working, and the result arrives later as a completion notification. Claude runs a subagent in the foreground when it needs the result before continuing, and setting `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` forces the foreground. So in practice, one-per-turn spawning isn't always sequential. The exam's model is the one above: independent subagents go out as multiple Task calls in one coordinator response.
+</Callout>
 
 ## Give goals and quality criteria, not procedures
 
