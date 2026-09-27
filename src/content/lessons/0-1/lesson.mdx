@@ -1,0 +1,172 @@
+## Why start here
+
+Most certification exams reward recall. CCAR-F mostly doesn't. Its guide says it validates that you can "make informed decisions about tradeoffs when implementing real-world solutions with Claude." Almost every item puts you in a production situation, describes a symptom, and asks which change fixes it. Several answers will be technically possible, and one will be the right call for that situation.
+
+So this lesson covers two things before any technical material: how the exam is put together, and the small set of recurring judgments it keeps testing. Once you can spot those judgments, the rest of the course becomes a series of variations on them.
+
+## The exam at a glance
+
+| | |
+|---|---|
+| Items | 60 multiple-choice and multiple-response (each item states how many to select) |
+| Structure | 4 scenarios, drawn at random from a bank of 6 |
+| Time | 120 minutes (about 2 minutes per item) |
+| Passing score | 720 on a 100–1,000 scaled score |
+| Scoring model | Criterion-referenced: you're measured against a fixed standard, not other candidates |
+| Fee / validity | $125 USD; credential valid 12 months |
+| Delivery | Proctored by Pearson VUE, online or at a test center |
+
+Two scoring details matter for how you study:
+
+1. **Pass/fail comes only from your total scaled score.** The per-domain percentages on your score report are for diagnosis. There's no per-domain minimum, so the weights below tell you where your study time pays off most.
+2. **Scaled scores equate across exam forms.** Different forms may be slightly harder or easier, and scaling cancels that out. 720 is not the same as "72% correct," so don't try to reverse-engineer a raw cut score. Aim for solid competence in every domain.
+
+## The five domains and where your points come from
+
+With 60 items, the blueprint weights work out to roughly this many scored items per domain:
+
+| Domain | Weight | ≈ Items | Lessons in this app |
+|---|---|---|---|
+| 1. Agentic Architecture & Orchestration | 27% | ~16 | 9 (Module 1) |
+| 2. Tool Design & MCP Integration | 18% | ~11 | 7 (Module 2) |
+| 3. Claude Code Configuration & Workflows | 20% | ~12 | 9 (Module 3) |
+| 4. Prompt Engineering & Structured Output | 20% | ~12 | 8 (Module 4) |
+| 5. Context Management & Reliability | 15% | ~9 | 7 (Module 5) |
+
+Domain 1 is the single largest block. It also overlaps heavily with Domains 2 and 5, because the multi-agent and customer-support scenarios draw from all three at once. Time spent on orchestration also strengthens your tool-design and reliability answers.
+
+<Callout type="exam">
+Every lesson in Modules 1–5 lists the **task statement** it covers (for example, "Task 1.3"). Exam items are written against those task statements, so the guide's "Knowledge of" and "Skills in" bullets are close to a list of what you'll be asked.
+</Callout>
+
+## The six scenarios
+
+Every question sits inside one of these production contexts. You'll get four of them, and you can't choose which, so you need all six.
+
+| Scenario | What you're building | Primary domains |
+|---|---|---|
+| Customer Support Resolution Agent | Agent SDK agent with MCP tools (`get_customer`, `lookup_order`, `process_refund`, `escalate_to_human`), targeting 80%+ first-contact resolution | 1, 2, 5 |
+| Code Generation with Claude Code | Team workflow: slash commands, CLAUDE.md, plan mode vs direct execution | 3, 5 |
+| Multi-Agent Research System | Coordinator delegating to search, analysis, synthesis, and report subagents, producing cited reports | 1, 2, 5 |
+| Developer Productivity with Claude | Agent SDK tool for exploring codebases using Read/Write/Bash/Grep/Glob plus MCP servers | 2, 3, 1 |
+| Claude Code for CI/CD | Automated review, test generation, and PR feedback with few false positives | 3, 4 |
+| Structured Data Extraction | Extracting from unstructured documents, validating with JSON schemas, handling edge cases | 4, 5 |
+
+With about 15 items per scenario, each scenario is a small exam of its own. Module 6 of this app has one capstone per scenario for that reason.
+
+## Anatomy of a question
+
+Most items have the same four parts:
+
+1. **Context:** the scenario and a specific system state ("Production logs show…", "Your evaluation shows 85% of…").
+2. **Symptom:** something is going wrong, and it's usually described precisely enough to point at the real cause.
+3. **Qualifier:** "most effective," "most likely root cause," "most effective *first step*," "most maintainable."
+4. **Four options:** usually one correct answer and three distractors, each wrong for a different reason.
+
+The qualifier matters. "Most effective first step" rewards the **proportionate** fix, meaning the cheapest high-leverage change aimed at the actual cause. "Most effective way to guarantee" rewards the **deterministic** fix, even if it costs more to build. Reading the qualifier carelessly is one of the easiest ways to lose points.
+
+### How distractors are built
+
+The official sample questions use the same distractor types over and over. Once you know them, many items come down to two real candidates.
+
+- **Right idea, wrong layer.** A prompt instruction where a programmatic guarantee is needed, or a tool-availability fix when the actual problem is tool ordering.
+- **Over-engineering.** A new classifier, routing layer, or ML model before anyone has tried the cheap fix (better tool descriptions, explicit criteria, few-shot examples).
+- **Blaming the wrong component.** The logs show the coordinator decomposed the task too narrowly, and the option blames the subagents that faithfully carried out what they were given.
+- **Unreliable proxy signals.** Routing on the model's self-reported confidence, or on customer sentiment, as a stand-in for case complexity.
+- **Suppressing information.** Generic error messages, empty results marked as success, or summaries that drop the numbers.
+- **Mismatched mechanism.** Batch API for a blocking workflow, user-level config for something the team needs, a bigger context window to fix an attention problem.
+- **Invented features.** A config file, flag, or environment variable that doesn't exist (for example `CLAUDE_HEADLESS=true` or `--batch`). If an option sounds plausible but you've never seen it in the docs, be skeptical.
+
+## Eight principles the exam keeps testing
+
+These show up in every domain. Each later lesson goes deeper on the relevant ones, but here's the full set:
+
+1. **Deterministic beats probabilistic when stakes are real.** If a rule must always hold (identity verified before a refund, no refunds over $500 without approval), enforce it in code with hooks or prerequisite gates. A prompt instruction that works 99% of the time still fails 1% of the time.
+2. **Fix the root cause the evidence points to.** Read the logs described in the question. If they show a narrow decomposition, the coordinator is at fault. If they show minimal tool descriptions, the descriptions are.
+3. **Proportionate first steps.** Improve descriptions, criteria, and examples before adding infrastructure.
+4. **Self-assessment is not a control signal.** An LLM's self-reported confidence is poorly calibrated, and sentiment doesn't track complexity. One important nuance: *field-level* confidence scores **calibrated against a labeled validation set** are an endorsed technique for routing human review (Task 5.5). Uncalibrated self-assessment used as a gate is the anti-pattern.
+5. **Least privilege for tools.** Give each agent the 4–5 tools its role needs. Too many tools degrades selection, and tools outside an agent's specialty get misused. Add narrowly scoped cross-role tools only for high-frequency needs.
+6. **Structure at every boundary.** Errors carry a category, a retryable flag, and what was attempted. Handoffs carry the customer ID, root cause, and recommended action. Findings carry claim-source mappings and dates. Prose loses information whenever it crosses a boundary.
+7. **Isolation is a feature.** Subagents don't inherit the coordinator's context, so pass what they need explicitly. An independent reviewer catches more than a model reviewing its own work in the same session.
+8. **Match the mechanism to the constraint.** Synchronous API vs batch, plan mode vs direct execution, path-scoped rules vs directory CLAUDE.md, project scope vs user scope. Each pair has a clear decision rule, and the exam tests it.
+
+<Callout type="warning" title="The most common trap">
+Picking the most sophisticated answer. The exam consistently favors the simplest mechanism that actually solves the stated problem. Sophistication only wins when the question demands a guarantee.
+</Callout>
+
+## Cue words that point to an answer
+
+| If the question says… | Think… |
+|---|---|
+| "guarantee," "must never," "compliance," financial consequences | Programmatic enforcement (hooks, prerequisite gates) |
+| "most effective first step" | Proportionate fix at the root cause, not new infrastructure |
+| "available to every developer when they clone" | Project scope, version-controlled (`.claude/commands/`, `.mcp.json`, project CLAUDE.md) |
+| "personal," "experimental," "without affecting teammates" | User scope (`~/.claude/…`, `~/.claude.json`) |
+| "files spread throughout the codebase" | `.claude/rules/` with glob `paths` |
+| "blocking," "developers wait," "pre-merge" | Synchronous API |
+| "overnight," "weekly," "cost savings," latency-tolerant | Message Batches API |
+| "inconsistent format despite detailed instructions" | Few-shot examples |
+| "invents values when the document lacks them" | Nullable / optional schema fields |
+| "dozens of files," "architectural decisions," "multiple valid approaches" | Plan mode |
+| "reviews its own code" / "same session" | Independent review instance |
+
+## Multiple-response items
+
+Some items say "Select 2" or "Select 3." A few tactics:
+
+- **Judge each option as true or false against the scenario on its own terms.** Don't pick the "best two" by comparing options against each other.
+- **Expect no partial credit.** The guide doesn't describe partial scoring, so assume you need the complete correct set. This app scores multi-select items all-or-nothing to match.
+- Correct options often form a **matched pair** (two complementary halves of the right design), while distractors each fail on a different principle.
+
+## What's out of scope
+
+The guide explicitly excludes these topics. Don't spend study time on them:
+
+- Fine-tuning or training custom models; Claude's internal architecture, training, or weights
+- Constitutional AI, RLHF, or safety-training methodology
+- API authentication, billing, account management, OAuth, key rotation
+- Rate limits, quotas, pricing calculations, token-counting algorithms
+- Streaming / server-sent events implementation
+- Prompt caching implementation details (knowing it *exists* is enough)
+- Embedding models and vector database internals
+- Computer use and vision capabilities
+- Deploying or hosting MCP servers (infrastructure, networking, containers)
+- Cloud-provider-specific configuration (AWS, GCP, Azure)
+- Benchmarking and model-comparison metrics
+
+<Callout type="note">
+In-scope API details are narrow but specific: `stop_reason` values (`"tool_use"`, `"end_turn"`), `tool_choice` modes (`"auto"`, `"any"`, forced), `max_tokens`, system prompts, and the Message Batches API (50% cost savings, up to 24-hour processing window, `custom_id`, no multi-turn tool calling). Know those well.
+</Callout>
+
+## Pacing on exam day
+
+- **Budget about 2 minutes per item.** Scenario setups repeat across the ~15 items in each scenario, so the first item in a scenario takes longer and the rest go faster.
+- **Read the qualifier before the options.** Decide whether you're looking for a first step, a guarantee, or a root cause.
+- **Eliminate by principle.** Cross out options that break one of the eight principles. That usually leaves two.
+- **Don't get stuck.** If the interface lets you flag items for review, as Pearson VUE exams usually do, make your best choice, flag it, and move on.
+
+## Logistics worth knowing
+
+- Register through the Anthropic Partner Academy; the exam is delivered by Pearson VUE. You can reschedule up to 24 hours before the appointment. Changes inside 24 hours forfeit the fee.
+- Bring a valid government photo ID whose name exactly matches your registration.
+- Retakes: 14-day wait after the first failed attempt, 30 days after the second, 90 days after the third; at most 4 attempts in a rolling 12 months. Each attempt costs the full fee.
+- Renewal: before your 12 months run out, complete a free, non-proctored assessment. If the credential lapses, you retake the full exam.
+
+## How to use this app
+
+Each lesson follows the same pattern: **deep dive → 5-question knowledge check → bonus build**.
+
+- **Passing is 4 of 5.** Retake a quiz as often as you like. The explanations are where most of the learning happens, especially for the options you got wrong.
+- **Bonus builds accumulate.** This lesson's bonus sets up a single lab repository, and every later bonus adds to it. By Module 6 you'll have working versions of all six exam scenarios, which is also the guide's own recommended preparation.
+- **Order:** Modules 1 → 5 follow blueprint weight, then Module 6 capstones combine everything, then Module 7 gives you full-format practice and anti-pattern drills.
+
+<KeyTakeaways>
+
+- 60 items, 4 of 6 scenarios, 120 minutes, pass at 720 scaled. Pass/fail uses only your total score.
+- Weight your study by domain: D1 27%, D3 20%, D4 20%, D2 18%, D5 15%.
+- The exam tests **judgment**: deterministic vs probabilistic, proportionate vs over-engineered, root cause vs symptom.
+- Learn the distractor patterns: wrong layer, over-engineering, blaming the wrong component, unreliable proxies, suppressed information, mismatched mechanism, invented features.
+- Read the qualifier ("first step," "guarantee," "root cause") before the options.
+- Skip out-of-scope topics; know the narrow in-scope API details cold.
+
+</KeyTakeaways>
