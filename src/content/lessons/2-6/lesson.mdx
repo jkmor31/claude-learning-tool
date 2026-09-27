@@ -45,7 +45,7 @@ A few design notes:
 - Catalogs work best for content that **changes slowly** relative to a session. A live queue that changes every second is better served by a query tool.
 
 <Callout type="note" title="Real-world note: using resources in Claude Code">
-In Claude Code, you can reference a server's resources with `@` mentions, in the form `@server:protocol://path` (for example `@docs:file://api/billing`), and the content is attached to your message. Claude Code also gives the model tools to list and read MCP resources itself. Other MCP clients decide for themselves how to surface resources, which is why the protocol calls them application-controlled.
+In Claude Code, you can reference a server's resources with `@` mentions, in the form `@server:resource` (for example `@github:repos/owner/repo/issues`). Type `@` to see the available resources, and the content is attached to your message. Claude Code also gives the model tools to list and read MCP resources itself. Other MCP clients decide for themselves how to surface resources, which is why the protocol calls them application-controlled.
 </Callout>
 
 ## Descriptions that beat the built-ins

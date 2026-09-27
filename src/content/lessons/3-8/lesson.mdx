@@ -1,0 +1,129 @@
+## Claude Code without a person at the keyboard
+
+Interactive Claude Code waits for you: to type the next message, approve a tool, or answer a question. A CI pipeline has nobody to do any of that. Task Statement 3.6 covers what changes when Claude Code runs **inside automation**: pull request reviews, test generation, changelog drafts, and nightly audits. This lesson covers the CLI mechanics; Lesson 3.9 covers designing the prompts.
+
+## `-p`: non-interactive mode
+
+The **`-p`** (or **`--print`**) flag runs Claude Code **non-interactively**. It takes the prompt, runs the task to completion, prints the result, and exits:
+
+```bash
+claude -p "Summarize the changes in this PR and list risks"
+```
+
+Without `-p`, Claude Code starts an interactive session and waits for input that will never arrive, so **the CI job hangs** until it times out. When a pipeline step "just sits there," a missing `-p` is the first thing to check.
+
+`-p` reads standard input too, which makes it easy to pipe content in:
+
+```bash
+git diff origin/main...HEAD | claude -p "Review this diff"
+```
+
+It also exits with code 0 on success and non-zero on failure, so the pipeline can branch on the result.
+
+## Structured output for machines
+
+Plain text is fine for a person reading a log. It's a problem for the next pipeline step, which has to parse it. Two flags fix that:
+
+- **`--output-format json`** wraps the result in a JSON envelope with the response, the session ID, and metadata such as cost.
+- **`--json-schema`** supplies a JSON Schema that the output must conform to. The validated object appears in the envelope's `structured_output` field.
+
+```bash
+claude -p "Review the diff in review.diff for bugs." \
+  --output-format json \
+  --json-schema "$(cat .github/review-schema.json)" \
+  | jq '.structured_output.findings'
+```
+
+With a schema like this:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "major", "minor"]
+          },
+          "message": { "type": "string" }
+        },
+        "required": ["file", "line", "severity", "message"]
+      }
+    }
+  },
+  "required": ["findings"]
+}
+```
+
+Now a script can loop over `findings` and **post each one as an inline PR comment** on the right file and line. That's the guide's use case: **machine-parseable, structured findings for automated posting.** Without the schema, you'd be writing a fragile parser for prose that changes shape from run to run.
+
+## A minimal GitHub Actions job
+
+```yaml
+name: claude-review
+on: pull_request
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: npm install -g @anthropic-ai/claude-code
+      - name: Review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD \
+            > review.diff
+          claude -p "Review review.diff against CLAUDE.md" \
+            --output-format json \
+            --json-schema "$(cat .github/review-schema.json)" \
+            --allowedTools "Read,Grep,Glob" \
+            > review.json
+      - run: node .github/post-comments.js review.json
+```
+
+Points to notice:
+
+- The API key comes from the CI **secret store**, never from the repo.
+- **`--allowedTools`** lets the review use read-only tools without prompting. There's no one to approve anything, so decide up front what the job may do. A review job has no reason to edit files or push.
+- The posting step is ordinary code reading JSON. Claude produces findings; your script decides what to do with them.
+
+## CLAUDE.md gives CI the project's context
+
+A CI run starts with no conversation history, so how does it know your testing standards, fixture conventions, or what counts as a real problem in review? The same way an interactive session does: **`CLAUDE.md`**. Claude Code run with `-p` in the checked-out repo loads the project's `CLAUDE.md` (and rules), so the conventions your team wrote down apply in CI too.
+
+That makes `CLAUDE.md` the place to put CI-relevant context:
+
+- **Review criteria**: what to flag, what to ignore, and severity definitions.
+- **Testing standards**: the framework, naming, and what makes a test valuable here.
+- **Available fixtures and helpers**, so generated tests use them instead of inventing their own.
+
+Lesson 3.9 goes deeper on what to write there and why it raises output quality.
+
+<Callout type="note" title="Real-world note: --bare and permission modes">
+Current Claude Code docs recommend **`--bare`** for scripted runs. It skips auto-discovery of hooks, plugins, MCP servers, auto memory, *and* `CLAUDE.md`, so every machine gets the same result. That's a trade-off against the exam's "CLAUDE.md gives CI its context" model: in bare mode you pass that context explicitly, for example with `--append-system-prompt-file`. For locked-down jobs, `--permission-mode dontAsk` denies anything that isn't pre-approved instead of waiting for an answer. The exam's answers stay the same: `-p` to avoid hangs, `--output-format json` with `--json-schema` for structured findings, and CLAUDE.md for project context.
+</Callout>
+
+## How this shows up on the exam
+
+- **"The CI job hangs waiting for input"** → run Claude Code with **`-p`** (`--print`).
+- **"We need to post findings as inline PR comments"** → **`--output-format json`** with **`--json-schema`**, then parse `structured_output`.
+- **"CI-generated tests ignore our conventions and fixtures"** → document standards and fixtures in **`CLAUDE.md`**, which CI-invoked Claude Code reads.
+- Distractors: a flag that "disables interactivity" that doesn't exist, parsing free text with regexes, or pasting conventions into every pipeline prompt.
+
+<KeyTakeaways>
+
+- **`-p` / `--print`** runs Claude Code non-interactively, which prevents CI jobs from hanging on input.
+- **`--output-format json`** plus **`--json-schema`** produces machine-parseable, schema-conforming output (in `structured_output`) for automated steps like inline PR comments.
+- **`CLAUDE.md`** carries project context (review criteria, testing standards, fixtures) into CI-invoked runs.
+- Keep CI credentials in the CI secret store, and pre-approve only the tools the job needs.
+
+</KeyTakeaways>

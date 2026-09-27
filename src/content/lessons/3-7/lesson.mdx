@@ -1,0 +1,90 @@
+## The first answer is rarely the last
+
+Most real work with Claude Code is iterative: you ask, look at the result, and steer. Task Statement 3.5 is about steering **efficiently**, meaning choosing the kind of feedback that gets you to the right result in the fewest rounds. The guide names four techniques: **concrete examples**, **test-driven iteration**, **the interview pattern**, and knowing **when to batch feedback vs send it one issue at a time**.
+
+## 1. Show, don't describe: input/output examples
+
+Prose descriptions of a transformation are surprisingly ambiguous. "Normalize the phone numbers" could mean a dozen formats. When Claude's output keeps varying or missing the point, the most effective fix is **2–3 concrete input/output examples**:
+
+```text
+Normalize phone numbers to E.164. Examples:
+
+  "(415) 555-0132"       -> "+14155550132"
+  "415.555.0132 x22"     -> "+14155550132"  (drop extensions)
+  "+44 20 7946 0958"     -> "+442079460958"
+```
+
+Each example answers a question the prose left open: which format, what happens to extensions, how international numbers are handled. Choose examples that **cover the cases where interpretations would differ**, not three versions of the easy case.
+
+The same move fixes edge cases. If a migration script mishandles nulls, don't say "handle nulls better." Give the **specific case**: "Input row `{email: null, name: "Ana"}` should produce `{email: "", name: "Ana", needs_review: true}`." A concrete input with its expected output is unambiguous in a way a description rarely is.
+
+## 2. Test-driven iteration
+
+For code, the most precise example is a test. The guide's pattern:
+
+1. **Write the test suite first**, covering expected behavior, **edge cases**, and **performance requirements** (for example, "parses a 50 MB file in under 2 seconds").
+2. Ask Claude to implement until the tests pass.
+3. **Iterate by sharing the test failures**: the actual failing output, not a paraphrase.
+
+```text
+FAIL  parseDuration > handles hours and minutes
+  expected parseDuration("1h30m") to be 5400
+  received 90
+```
+
+A failure like this tells Claude exactly what's wrong, what was expected, and where. Compare "it doesn't handle hours right," which leaves Claude guessing. Tests also turn "done" into something checkable: the work is finished when the suite is green, not when the code looks plausible.
+
+Write the tests **before** the implementation, or at least independently of it. Tests written after the code by the same process tend to test what the code does, not what it should do.
+
+## 3. The interview pattern
+
+In an unfamiliar domain, you may not know what you should be specifying. The **interview pattern** flips the direction: **before implementing, have Claude ask you questions** to surface considerations you hadn't thought of.
+
+```text
+I need a caching layer for our product-catalog API. Before
+writing any code, interview me: ask the questions you need
+answered to design this well, one topic at a time.
+```
+
+A good interview surfaces things like **cache invalidation strategy** (time-based, event-based, or both?), **failure modes** (serve stale data or fail when the backing service is down?), consistency needs, and memory limits. Each is a decision that's cheap to make now and expensive to discover after the code is written.
+
+Use it when the domain is new to you or the requirements are fuzzy. Skip it for well-understood tasks, where it only adds a round trip.
+
+## 4. One message or several?
+
+When you have several things to fix, should you send them all at once or one at a time? It depends on whether they **interact**:
+
+| The issues are… | Send them… | Why |
+|---|---|---|
+| **Interacting**: fixing one affects another | **Together, in one detailed message** | Claude needs the full picture to find a fix that satisfies all of them at once |
+| **Independent**: unrelated to each other | **Sequentially**, one at a time | Each fix is small, easy to verify, and doesn't get tangled with others |
+
+Example of interacting issues: "The retry loop hides the original error, *and* the timeout is shorter than the retry schedule, *and* the error log doesn't include the attempt count." Fixing the retry logic changes what the timeout and logging should be. Sent one by one, each fix may undo or conflict with the previous one. Sent together, Claude can redesign the retry path once.
+
+Example of independent issues: a typo in a help message, a missing index on an unrelated table, and a flaky date format in a report. Batching them makes one big change that's harder to review, and one mistake muddies all three.
+
+## Putting it together
+
+These techniques combine. A realistic sequence for an unfamiliar feature:
+
+1. **Interview** to surface the requirements you'd have missed.
+2. Write **tests** that encode the answers, including the edge cases.
+3. Add **concrete examples** anywhere the expected transformation is subtle.
+4. Iterate by sharing **failures**, batching **interacting** issues and sequencing **independent** ones.
+
+## How this shows up on the exam
+
+- **"Prose descriptions produce inconsistent results"** → give 2–3 concrete input/output examples.
+- **"Edge case keeps being mishandled"** (like nulls in a migration) → a specific test case with example input and expected output.
+- **"How to iterate toward correct code"** → tests first, covering edge cases and performance, then share the failures.
+- **"Unfamiliar domain, unclear requirements"** → the interview pattern before implementing.
+- **"Several problems to fix"** → interacting → one detailed message; independent → one at a time.
+
+<KeyTakeaways>
+
+- When descriptions are read inconsistently, **2–3 concrete input/output examples** communicate the transformation best. Pick examples where interpretations differ.
+- **Test-driven iteration**: write tests (behavior, edge cases, performance) first, then iterate by sharing the actual **test failures**.
+- The **interview pattern** has Claude ask questions first, surfacing considerations like cache invalidation and failure modes.
+- **Interacting issues** go in **one detailed message**; **independent issues** are fixed **sequentially**.
+
+</KeyTakeaways>

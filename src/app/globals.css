@@ -58,6 +58,13 @@
   content: none;
 }
 
+/* Wide tables scroll inside themselves instead of widening the page on phones. */
+.prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .prose summary {
   cursor: pointer;
   font-weight: 600;

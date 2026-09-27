@@ -1,0 +1,78 @@
+## Think first, or just do it?
+
+Claude Code can work two ways. In **direct execution**, it reads what it needs and starts changing files. In **plan mode**, it explores the codebase and proposes a plan, but **makes no edits** until you approve. Task Statement 3.4 is about choosing between them, and about keeping exploration from swamping your context along the way.
+
+## What plan mode is
+
+In plan mode, Claude can read files, search, and reason, but it doesn't write files or run commands that change anything. It produces a plan: what it found, the approach it recommends, which files change and how, and the risks. You review the plan, push back or adjust, and approve it before any code changes.
+
+You can enter plan mode by pressing **Shift+Tab** to cycle permission modes until the status bar shows plan mode, or by starting a session with `claude --permission-mode plan`.
+
+The point is **safe exploration and design before committing to changes**. A plan that's wrong costs a few minutes of reading. An implementation that's wrong costs a revert, a second attempt, and sometimes a mess spread across 40 files. Plan mode moves the discovery of "wait, that's the wrong approach" to the cheapest possible moment.
+
+## When to use which
+
+| Use **plan mode** when… | Use **direct execution** when… |
+|---|---|
+| The change is **large-scale** or touches **many files** | The change is **small and well-scoped**, often one file |
+| There are **multiple valid approaches** to choose between | The approach is **obvious** |
+| The decision has **architectural** consequences | Nothing structural changes |
+| You don't yet understand the code involved | You already know where and what to change |
+
+The exam's examples map neatly:
+
+- **Plan mode:** restructuring a monolith into microservices; migrating a library used in 45+ files; choosing between two integration approaches with different infrastructure needs, such as webhooks vs polling.
+- **Direct execution:** fixing a bug in one file when the stack trace points straight at it; adding a date-validation check to one function.
+
+A quick test: **could a reasonable engineer do this task two meaningfully different ways?** If yes, plan first. If there's one obvious way, just do it. Plan mode on a one-line fix is ceremony; direct execution on an architecture change is a gamble.
+
+## Plan, then execute
+
+The two modes aren't rivals. The guide's recommended pattern for big work combines them: **plan mode for investigation, direct execution for implementation.**
+
+```text
+1. Plan mode   Explore the 45 files that use the old HTTP
+               client. Propose a migration approach, an
+               order, and risks. (No edits.)
+2. Review      You adjust: "Do the retry wrapper first,
+               and keep the old client behind a flag."
+3. Execute     Approve. Claude implements the agreed plan,
+               file by file, running tests as it goes.
+```
+
+Planning up front means execution is mostly mechanical, and you've already agreed on the decisions that would have been expensive to reverse.
+
+## Keeping exploration out of your context: the Explore subagent
+
+Big tasks start with a lot of reading: dozens of files, hundreds of search results. If all of that lands in your main conversation, your context fills with discovery output before you've written a line, and by the implementation phase the details that matter are competing with piles of irrelevant file contents. That's how multi-phase tasks run out of context.
+
+The **Explore subagent** handles this. It's a built-in, read-only subagent designed for searching and reading a codebase. It does the discovery in **its own context window** and returns a **summary** to the main conversation: the relevant files, how they connect, and what matters for the task. This is Lesson 1.2's context isolation again, packaged for exploration.
+
+Use it for **verbose discovery phases**:
+
+- "Find everywhere the old HTTP client is used and group the call sites by pattern."
+- "Map how authentication flows from the login route to the session store."
+
+The main session receives a page of findings instead of 60 file reads, and it has room for the planning and implementation that follow. Claude Code often uses Explore on its own during planning; you can also ask for it directly ("use the Explore subagent to...").
+
+<Callout type="exam" title="Two different problems">
+Plan mode solves **"we might build the wrong thing"**: it adds a design checkpoint before edits. The Explore subagent solves **"discovery output is flooding the context"**: it isolates verbose reading and returns a summary. Questions about context exhaustion during exploration point to Explore. Questions about risky, multi-approach changes point to plan mode.
+</Callout>
+
+## How this shows up on the exam
+
+- **Microservice restructuring, a 45-file library migration, or choosing between integration approaches** → plan mode.
+- **A single-file bug with a clear stack trace, or adding one validation check** → direct execution.
+- **"Avoid costly rework"** → plan mode's explore-and-design step before changes.
+- **"The context fills up during discovery in a multi-phase task"** → the Explore subagent, which returns summaries.
+- **"Plan the migration, then do it"** → plan mode for investigation, then direct execution for implementation.
+
+<KeyTakeaways>
+
+- **Plan mode** explores and proposes without editing. Use it for large-scale, multi-file, architectural, or multiple-approach tasks.
+- **Direct execution** fits simple, well-scoped changes with an obvious approach.
+- Plan mode prevents **costly rework** by catching wrong approaches before any code changes.
+- Combine them: **plan to investigate and decide, then execute** the agreed plan.
+- The **Explore subagent** isolates verbose discovery in its own context and returns a summary, preventing context exhaustion.
+
+</KeyTakeaways>

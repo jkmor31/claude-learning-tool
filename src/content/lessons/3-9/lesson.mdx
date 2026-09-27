@@ -1,0 +1,98 @@
+## A pipeline people actually trust
+
+Lesson 3.8 got Claude Code running in CI. Getting it **useful** is a different problem. A review bot that posts 30 comments per PR, repeats the same comments after every push, and flags its own code as fine gets muted within a week. A test generator that writes 40 trivial tests, half of which already exist, just adds maintenance.
+
+The rest of Task Statement 3.6 covers four practices that separate a high-signal pipeline from a noisy one.
+
+## 1. Review with an independent instance
+
+The guide makes a point that surprises people: **the same Claude session that generated code is less effective at reviewing its own changes than an independent review instance.**
+
+The reason is **session context**. The generating session carries its own reasoning: why it chose this approach, what it assumed about the inputs, which edge cases it decided didn't matter. When asked to review, it re-reads the code through those same assumptions. The flaws it didn't see while writing are the flaws it's least likely to see while reviewing, because the context that produced them is still there.
+
+An **independent instance** (a fresh `claude -p` run, or a separate subagent) sees only the diff, the codebase, and the review criteria. It has no investment in the approach and no memory of the assumptions, so it evaluates the code as a stranger would.
+
+```text
+Weaker:   session A writes the feature
+          -> "now review your changes" (same session A)
+
+Stronger: session A writes the feature
+          -> CI starts session B with only the diff,
+             the repo, and CLAUDE.md's review criteria
+```
+
+This is Lesson 1.2's context isolation again, used for **independence** rather than tidiness.
+
+## 2. Re-reviews: report only what's new or still open
+
+A PR gets reviewed, the author pushes fixes, and the review runs again. A naive re-review re-reports everything it finds, including the three issues already commented on and the two the author just fixed. Duplicate comments pile up, and developers learn to ignore the bot.
+
+The fix is to **include the prior review's findings in the context** and instruct Claude to **report only new issues, or earlier issues that are still unaddressed**:
+
+```text
+Previous review findings (JSON) are in prior-findings.json.
+Review the diff since that review.
+- Report NEW issues introduced by the latest commits.
+- For each prior finding, mark it "resolved" or "still open".
+- Do not repeat prior findings that are already resolved.
+```
+
+With structured output (Lesson 3.8), the posting script can then resolve fixed threads and post only the new comments. The history of the review becomes an input, not something the bot rediscovers from scratch.
+
+## 3. Test generation: show the tests that already exist
+
+Ask Claude to "generate tests for `cart.ts`" with no other context, and it will often propose scenarios the suite already covers: the happy path, the empty cart, the invalid quantity. Those duplicates add nothing.
+
+The guide's practice: **provide the existing test files in context**, so generation avoids scenarios that are already covered.
+
+```text
+Existing tests for this module: test/cart.test.ts (attached).
+Generate tests only for behavior NOT covered there. For each
+new test, name the uncovered branch or edge case it targets.
+```
+
+The last line is a useful discipline: every new test has to justify itself by naming the gap it fills.
+
+## 4. Put test standards and fixtures in CLAUDE.md
+
+The biggest lever on test quality is telling Claude what a **valuable** test looks like in your codebase, once, in `CLAUDE.md`, where every CI run picks it up (Lesson 3.8):
+
+```markdown
+## Testing standards
+- Test behavior through public functions; never test private
+  helpers or implementation details.
+- Valuable tests: boundary values, error paths, money rounding,
+  concurrency on the order queue. Skip trivial getters.
+- Fixtures: use test/fixtures/users.ts (makeUser) and
+  test/fixtures/orders.ts (makeOrder); don't build objects inline.
+- One behavior per test, named "does X when Y".
+```
+
+This does two things. It **raises quality**: tests use real fixtures, follow conventions, and target the areas where bugs actually hurt. And it **cuts low-value output**: with "skip trivial getters" and a definition of valuable tests, Claude stops padding the suite.
+
+## The common thread: explicit criteria
+
+All four practices come down to giving Claude **explicit information instead of hoping it infers it**: who reviews (an independent instance), what's already been said (prior findings), what already exists (current tests), and what "good" means here (standards in `CLAUDE.md`). Vague instructions like "only report important issues" or "write good tests" don't change much. Lesson 4.1 shows that specific, categorical criteria are what actually raise precision.
+
+<Callout type="warning" title="Anti-patterns">
+- Asking the generating session to "double-check your own work" as the review step.
+- Re-running a review with no memory of earlier findings, which duplicates comments on every push.
+- Generating tests without showing the existing suite.
+- Repeating testing conventions in every pipeline prompt instead of writing them once in `CLAUDE.md`.
+</Callout>
+
+## How this shows up on the exam
+
+- **"The review misses issues in code Claude just wrote"** → use an **independent review instance**, not the generating session.
+- **"Duplicate review comments after each push"** → include **prior findings** and report only **new or still-unaddressed** issues.
+- **"Generated tests duplicate existing ones"** → put the **existing test files** in context.
+- **"Generated tests are low-value or ignore our fixtures"** → document **testing standards, valuable-test criteria, and fixtures in CLAUDE.md**.
+
+<KeyTakeaways>
+
+- The session that wrote the code reviews it poorly; an **independent instance** without that session's context reviews better.
+- On re-review, provide **prior findings** and ask for **only new or still-open issues**, avoiding duplicate comments.
+- Give test generation the **existing tests**, so it targets real gaps instead of duplicating coverage.
+- Document **testing standards, valuable-test criteria, and fixtures in CLAUDE.md** to raise quality and cut low-value tests.
+
+</KeyTakeaways>

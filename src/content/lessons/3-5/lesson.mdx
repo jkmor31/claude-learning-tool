@@ -1,0 +1,88 @@
+## Conventions that belong to file types, not folders
+
+Some conventions follow a **kind of file** wherever it lives: every test file, every Terraform module, every database migration, every React component. Lesson 3.1's directory-level `CLAUDE.md` handles conventions that belong to a **folder**. For conventions that belong to a **file type scattered across folders**, Task Statement 3.3 has a better tool: **path-specific rules**.
+
+## A rule with a `paths` field
+
+Lesson 3.2 introduced `.claude/rules/`. Add YAML frontmatter with a **`paths`** field, and the rule becomes conditional:
+
+```markdown
+---
+paths:
+  - "**/*.test.tsx"
+  - "**/*.test.ts"
+---
+
+# Testing conventions
+
+- Use React Testing Library queries by role, not test IDs.
+- One behavior per test; name it "does X when Y".
+- Mock network calls with msw handlers from test/handlers/.
+- Never snapshot whole pages.
+```
+
+`paths` holds **glob patterns** (the same syntax as the Glob tool in Lesson 2.7). The rule **loads only when Claude is working with a file that matches**. Editing `src/cart/Cart.test.tsx` brings in the testing conventions. Editing `src/cart/Cart.tsx` doesn't.
+
+A rule **without** `paths` loads every session, like `CLAUDE.md`. That's the only difference, and it's what turns a rules folder from "organized" into "organized and efficient."
+
+## Why conditional loading matters
+
+Every always-loaded instruction costs tokens in every session and competes for attention with everything else in context. Path-scoped rules fix both:
+
+- **Less irrelevant context.** Terraform conventions don't sit in context while you fix a CSS bug.
+- **Fewer tokens.** A 60-line testing guide loads in the sessions that touch tests, not in all of them.
+- **Better adherence.** When a rule does load, it's relevant to the file at hand, so it isn't buried among unrelated instructions.
+
+## Glob patterns you'll use
+
+| Pattern | Matches |
+|---|---|
+| `**/*.test.tsx` | Every `.test.tsx` file, in any folder |
+| `terraform/**/*` | Everything under `terraform/` |
+| `src/api/**/*.ts` | TypeScript files anywhere under `src/api/` |
+| `**/migrations/*.sql` | SQL files in any `migrations` folder |
+| `src/**/*.{ts,tsx}` | Both `.ts` and `.tsx` files under `src/` |
+
+`**` matches any number of folders, `*` matches within one name, and braces list alternatives. The first pattern is the one the exam likes, because it captures a **file type regardless of directory location**.
+
+## Path rules vs directory CLAUDE.md files
+
+This is the judgment the exam tests:
+
+| | Subdirectory `CLAUDE.md` | Path-scoped rule |
+|---|---|---|
+| Scope | **One folder** and what's under it | **Any files matching a pattern**, anywhere |
+| Good for | Conventions for a self-contained area, like `packages/payments/` | Conventions for a **file type spread across the codebase**, like test files |
+| How many files | One per folder | One rule, however many folders |
+
+Imagine test files living next to their source files across 40 feature folders. With directory-level files, you'd need a `CLAUDE.md` in each of the 40 folders, all repeating the same testing conventions, all drifting apart as people edit them. One rule with `paths: ["**/*.test.tsx"]` covers all 40, including folders created next month.
+
+The rule of thumb: **if the convention follows a folder, use that folder's `CLAUDE.md`. If it follows a file type across folders, use a path-scoped rule.**
+
+<Callout type="note" title="Real-world note: when a path rule triggers">
+In current Claude Code, a path-scoped rule loads when Claude **reads** a file matching one of its patterns, which covers editing too, since Claude reads a file before editing it. `paths` is the only frontmatter field a rule file uses, and it accepts a YAML list or a comma-separated string. The exam describes path rules as loading "when editing matching files"; both descriptions point to the same answer.
+</Callout>
+
+## Design tips
+
+- **Keep each rule to one concern.** `testing.md`, `terraform.md`, and `migrations.md`, each with its own `paths`.
+- **Scope as narrowly as the convention really applies.** `**/*` defeats the purpose.
+- **Put genuinely universal rules in `CLAUDE.md`** or a rule without `paths`. A rule everyone needs every session shouldn't be conditional.
+- **Check the pattern.** Use the Glob tool (or `/context` after opening a matching file) to confirm it matches the files you expect.
+
+## How this shows up on the exam
+
+- **"Conventions for test files spread throughout the codebase"** → a `.claude/rules/` file with `paths: ["**/*.test.tsx"]`, not a `CLAUDE.md` in every folder.
+- **"Rules should apply only when editing Terraform files"** → `paths: ["terraform/**/*"]`.
+- **"Reduce irrelevant context and token usage from conventions"** → path-scoped rules that load only for matching files.
+- **"Conventions for one self-contained package"** → that package's directory-level `CLAUDE.md` is fine.
+
+<KeyTakeaways>
+
+- A `.claude/rules/` file with YAML **`paths`** frontmatter (glob patterns) loads **only when Claude works on matching files**.
+- Conditional loading means **less irrelevant context and fewer tokens**.
+- Glob patterns like **`**/*.test.tsx`** match a file type **regardless of directory**.
+- Choose path-scoped rules over subdirectory `CLAUDE.md` files when a convention applies to **files spread across the codebase**.
+- Rules without `paths` load every session.
+
+</KeyTakeaways>
