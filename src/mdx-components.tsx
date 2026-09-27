@@ -1,5 +1,6 @@
 import type { MDXComponents } from "mdx/types";
 import type { ReactNode } from "react";
+import { CodeBlock } from "@/components/CodeBlock";
 
 const calloutStyles = {
   note: { label: "Note", className: "border-border bg-surface" },
@@ -39,7 +40,7 @@ export function Figure({ caption, children }: { caption?: string; children: Reac
   );
 }
 
-const components: MDXComponents = { Callout, KeyTakeaways, Figure };
+const components: MDXComponents = { Callout, KeyTakeaways, Figure, pre: CodeBlock };
 
 export function useMDXComponents(): MDXComponents {
   return components;

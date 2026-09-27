@@ -65,6 +65,38 @@
   overflow-x: auto;
 }
 
+/* Syntax-highlighted code blocks (rehype-pretty-code / shiki at build time).
+   Replaces Tailwind Typography's default dark "bubble" pre with a card that
+   matches the rest of the app (see Figure/Callout in mdx-components.tsx). */
+.prose pre {
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+}
+
+.prose pre code {
+  background: transparent;
+  padding: 0;
+  border: none;
+  font-size: 0.85em;
+  counter-reset: none;
+}
+
+/* Each token carries both colors (defaultColor: false in next.config.ts);
+   pick one with the same media query the rest of the theme uses. */
+[data-rehype-pretty-code-figure] pre code span {
+  color: var(--shiki-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-rehype-pretty-code-figure] pre code span {
+    color: var(--shiki-dark);
+  }
+}
+
 .prose summary {
   cursor: pointer;
   font-weight: 600;
