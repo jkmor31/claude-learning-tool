@@ -1,3 +1,6 @@
+import { ConfigStack } from "./diagrams/ConfigStack";
+import { NewTeammate } from "./diagrams/NewTeammate";
+
 ## Instructions that follow you into every session
 
 Every Claude Code session starts with an empty context window. `CLAUDE.md` files are how you carry knowledge across sessions: build commands, conventions, architecture notes, "always do X" rules. Claude Code reads them at the start of a session and puts their contents into context.
@@ -18,11 +21,9 @@ The rule the exam leans on hardest: **user-level instructions apply only to that
 
 Claude Code doesn't pick one file. It **concatenates** every file that applies, from the broadest to the most specific:
 
-```text
-~/.claude/CLAUDE.md             user: your preferences
-repo/CLAUDE.md                  project: team standards
-repo/packages/api/CLAUDE.md     directory: API conventions
-```
+<Figure caption="Every file that applies joins the context, broadest first; none replaces another.">
+  <ConfigStack />
+</Figure>
 
 When you're working in `packages/api/`, all three are in context, and the more specific file is read later. Two consequences:
 
@@ -42,6 +43,10 @@ The guide's example is worth knowing cold:
 > A developer has used Claude Code on the team repo for months, and it follows the team's conventions perfectly. A new teammate joins, and in their sessions Claude ignores those conventions entirely.
 
 The conventions are the same, the repo is the same, and the model is the same. The difference is **what's loaded**. The likely cause: the instructions live in the original developer's **`~/.claude/CLAUDE.md`**, which the new teammate doesn't have. The fix is to move team conventions into the **project-level** `CLAUDE.md` and commit it, leaving only personal preferences in user scope.
+
+<Figure caption="Same repo, same model: only the user-level file differs, and it never reaches a teammate.">
+  <NewTeammate />
+</Figure>
 
 A good diagnostic habit is to ask two questions of any instruction:
 
