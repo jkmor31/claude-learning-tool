@@ -53,6 +53,27 @@ export const lessonLoaders: Record<string, Loader> = {
     ]);
     return { Body, quiz, bonus };
   },
+  "1-7": async () => {
+    const [{ default: Body }, { quiz, bonus }] = await Promise.all([
+      import("./lessons/1-7/lesson.mdx"),
+      import("./lessons/1-7/quiz"),
+    ]);
+    return { Body, quiz, bonus };
+  },
+  "1-8": async () => {
+    const [{ default: Body }, { quiz, bonus }] = await Promise.all([
+      import("./lessons/1-8/lesson.mdx"),
+      import("./lessons/1-8/quiz"),
+    ]);
+    return { Body, quiz, bonus };
+  },
+  "1-9": async () => {
+    const [{ default: Body }, { quiz, bonus }] = await Promise.all([
+      import("./lessons/1-9/lesson.mdx"),
+      import("./lessons/1-9/quiz"),
+    ]);
+    return { Body, quiz, bonus };
+  },
 };
 
 export const builtLessonIds = new Set(Object.keys(lessonLoaders));

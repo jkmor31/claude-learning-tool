@@ -1,0 +1,107 @@
+## Two ways to break down a big task
+
+Large tasks can't be done well in one pass. A 20-file code review, a test suite for a legacy system, and a root-cause investigation are all too big or too uncertain for a single prompt. Task Statement 1.6 is about choosing **how** to split them up, and there are two broad strategies:
+
+- **Prompt chaining (a fixed sequential pipeline):** you decide the steps in advance, and each step's output feeds the next.
+- **Dynamic adaptive decomposition:** you decide the *first* steps, and later subtasks are generated from what those steps discover.
+
+Neither is better in general. The skill being tested is **matching the strategy to the work**.
+
+## Prompt chaining: when the steps are predictable
+
+When you know in advance what has to happen, and the same steps apply every time, a fixed chain is simpler, cheaper, easier to test, and more consistent:
+
+```
+step 1: classify  ->  step 2: extract fields  ->  step 3: draft reply
+```
+
+Each step is a focused prompt with one job, and you can check each intermediate output. If replies are wrong, you can see whether classification or extraction went wrong. It's the software pipeline you already know, with a model in some of the stages.
+
+Chaining fits **predictable, multi-aspect work**: processing documents through the same stages, reviews that always check the same dimensions, and repeatable report generation.
+
+### The guide's key chain: per-file passes, then an integration pass
+
+The guide's main example is **large code reviews**. Put a 14-file pull request in one prompt, ask for a review, and you'll typically see:
+
+- detailed feedback on some files and one-line comments on others,
+- obvious bugs missed, often in files near the middle of the input, and
+- **contradictions**: a pattern flagged as a problem in one file and approved in another.
+
+This is **attention dilution**. With that much material in a single pass, the model can't give every file the same scrutiny. A larger context window doesn't fix it: more room to fit the input isn't more attention per file.
+
+The chain that fixes it:
+
+```
+            +----------+  +----------+       +----------+
+pass 1:     |  file 1  |  |  file 2  |  ...  |  file N  |   local issues,
+(per file)  +----+-----+  +----+-----+       +----+-----+   one file each
+                 |             |                  |
+                 +-------------+--------+---------+
+                                        v
+pass 2:                   +---------------------------+
+(integration)             | cross-file data flow,     |
+                          | interface mismatches,     |
+                          | inconsistent patterns     |
+                          +-------------+-------------+
+                                        v
+                                consolidated review
+```
+
+1. **Per-file local passes.** Each file is reviewed on its own, getting full attention for local issues: logic errors, missing error handling, unsafe calls. These passes are independent, so they can run in parallel.
+2. **A cross-file integration pass.** A separate pass looks at how the files interact: a function whose signature changed in one file but not at its call sites, data validated in one layer but not another, conventions applied inconsistently. It gets the diffs plus the per-file findings, not a fresh read of everything.
+
+Each pass is small enough to do well, and the integration pass exists specifically to catch the issues no single file shows. (Lesson 4.8 comes back to this as a multi-pass review architecture.)
+
+<Callout type="exam">
+When a single-pass review is inconsistent, contradictory, or misses obvious bugs, the fix is **per-file passes plus an integration pass**. Common distractors: a model with a larger context window, running the same review several times and keeping only findings that recur (which suppresses real, intermittently caught bugs), or making developers split the PR (which shifts the burden instead of fixing the review).
+</Callout>
+
+## Dynamic decomposition: when you don't know the steps yet
+
+Some tasks can't be planned up front, because what you should do next depends on what you find. The guide's example is **"add comprehensive tests to a legacy codebase."** You can't list the test files to write before you know how the code is structured, which parts matter most, and what blocks testing.
+
+A fixed chain ("for each file alphabetically, write tests") produces lots of low-value tests for trivial helpers, gets stuck on untestable modules, and never notices that everything depends on one global database connection that needs a test fixture first.
+
+The guide describes the adaptive approach in three moves:
+
+1. **Map the structure.** Identify modules, entry points, dependencies, and existing test infrastructure (or its absence).
+2. **Identify high-impact areas.** Look for critical paths (payments, auth), code that changes often, code with a history of bugs, and code that many other modules depend on.
+3. **Create a prioritized plan that adapts as dependencies are discovered.** Start with the highest-impact area, and **revise the plan** when work reveals something new.
+
+For example, adaptation might look like this. The plan starts with "test the payment service." Mapping shows the payment service reads config from a global singleton that opens a real database connection at import time. That discovery **creates a new first task**: introduce a test fixture or seam for the config. The plan reorders around it. A fixed chain has no way to react like that.
+
+The same pattern fits any **open-ended investigation**, such as debugging an intermittent failure, auditing an unfamiliar system, or researching a question whose shape is unclear. Each step's findings decide the next subtask.
+
+## Choosing the strategy
+
+| Question | Prompt chaining | Dynamic decomposition |
+|---|---|---|
+| Can you list the steps before starting? | Yes | No, they depend on findings |
+| Does the same process apply every time? | Yes | No, each case differs |
+| Typical examples | Multi-aspect reviews, document processing, repeatable reports | Legacy test coverage, root-cause investigation, open research |
+| Main risk | Rigid: can't react to surprises | Can wander; needs goals and a stopping criterion |
+| What makes it work | Focused, checkable steps | Mapping first, prioritizing, and revising the plan |
+
+Two connections to earlier lessons:
+
+- Dynamic decomposition works best with **goal-based prompts** (Lesson 1.5): state the objective and quality bar, and let the plan evolve.
+- A coordinator that chooses subagents per request (Lesson 1.3) is making a decomposition decision each time, rather than always running the full chain.
+
+Real systems often **combine** the two: a dynamic plan at the top level whose individual steps are well-defined chains. For example, an adaptive test-writing plan where each "test this module" step runs a fixed analyze → write → run → fix chain.
+
+## How this shows up on the exam
+
+- **Inconsistent, contradictory single-pass review of many files** → per-file passes plus a cross-file integration pass (attention dilution, not a context-size problem).
+- **A predictable, repeatable multi-step process** → prompt chaining. A planner agent would be over-engineering.
+- **An open-ended task, such as adding tests to a legacy system or investigating an unclear failure** → map the structure, find the high-impact areas, and follow a prioritized plan that adapts as dependencies are discovered.
+- **A fixed script that keeps executing irrelevant steps after an early finding changes the picture** → switch to adaptive decomposition.
+
+<KeyTakeaways>
+
+- **Prompt chaining**: fixed, sequential, focused steps. Best for predictable, multi-aspect work.
+- **Dynamic decomposition**: subtasks come from what each step discovers. Best for open-ended investigation.
+- Large reviews suffer from **attention dilution**. Split them into **per-file local passes** plus a **cross-file integration pass**. A bigger context window doesn't fix attention.
+- For open-ended tasks: **map the structure → identify high-impact areas → follow a prioritized plan that adapts** as dependencies are discovered.
+- The strategies combine well: an adaptive top-level plan whose steps are well-defined chains.
+
+</KeyTakeaways>

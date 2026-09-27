@@ -1,0 +1,137 @@
+## Work that spans more than one sitting
+
+Real investigations don't finish in one session. You spend an afternoon having an agent map a legacy payments system, then you stop. Tomorrow you want to continue, or try two different refactoring approaches from the same analysis, or come back after a teammate has changed half the files. Task Statement 1.7 covers the tools for this and, more importantly, the judgment about which one to use:
+
+- **Resume** a named session to continue where you left off.
+- **Resume and report changes** so the agent re-checks only the files that changed.
+- **Fork** a session to explore alternatives from a shared baseline.
+- **Start fresh with a structured summary** when too much of the old context is stale.
+
+First, one fact that explains most of the lesson: **a session saves the conversation, not the codebase.** It records your prompts, every tool call, every tool result, and every response. If the files change after the agent read them, the session still holds the **old** contents in its history. That's why resuming isn't always safe.
+
+## Named sessions and --resume
+
+In Claude Code, you can give a session a name and return to it by that name later:
+
+```bash
+# Start a named investigation
+claude -n payments-audit
+
+# ...later, even days later, pick up exactly that conversation
+claude --resume payments-audit
+
+# Rename the current session from inside it
+/rename payments-audit
+```
+
+The related commands are easy to mix up:
+
+| Command | What it resumes |
+|---|---|
+| `claude --resume <name-or-id>` (`-r`) | A **specific** prior session, by name or ID |
+| `claude --continue` (`-c`) | The **most recent** conversation in the current directory |
+| `claude --resume <name> --fork-session` | A **copy** of that session under a new ID; the original stays unchanged |
+
+Names matter when you run several long investigations in parallel. `--continue` only gets you the most recent one, and session IDs are hard to remember. The guide's skill is **using `--resume` with session names to continue named investigation sessions across work sessions.**
+
+In the **Agent SDK**, the same capability is the `resume` option with a session ID. Capture the ID from the result message, then pass it back later:
+
+```python
+options = ClaudeAgentOptions(
+    resume=session_id,   # captured from a previous run's ResultMessage
+    allowed_tools=["Read", "Grep", "Glob"],
+)
+```
+
+## Resuming after the code has changed
+
+Resuming gives the agent everything it learned before: which files matter, how the modules connect, what it has already ruled out. That's valuable, but some of what it learned may no longer be true.
+
+Suppose the agent analyzed 40 files yesterday, and overnight a teammate refactored 3 of them. The resumed session still contains the **old** contents of those 3 files in its tool results. Unless told otherwise, the agent will reason from the old versions: citing functions that were renamed, or trusting logic that was rewritten.
+
+The guide's fix: **tell the resumed session exactly what changed**, so it can re-analyze only those parts instead of re-exploring everything.
+
+> Since our last session, these files changed: `payments/gateway.py` (retry logic moved into a new `RetryPolicy` class), `payments/models.py` (the `Refund.amount` field is now in cents), and `tests/test_gateway.py`. Re-read those three before continuing. Everything else is unchanged.
+
+This keeps the 37 still-valid analyses and replaces only the stale ones. `git diff --stat` since the last session is a quick way to get that list.
+
+## When to start fresh with a structured summary
+
+Sometimes most of the old context is wrong. A large refactor landed, or so many files changed that the resumed session contradicts itself, citing code that no longer exists and mixing old and new versions of the same function. The guide is explicit here: **starting a new session with a structured summary is more reliable than resuming with stale tool results.**
+
+The stale results don't disappear just because you add a note. They're still in the history, and the model may still draw on them. A fresh session with a well-built summary keeps the **conclusions** that still hold and drops the **raw evidence** that's now out of date:
+
+```markdown
+## Investigation summary: payments audit (as of 2026-03-12)
+
+**Goal:** find why refunds over $1,000 intermittently fail.
+
+**Established (still valid):**
+- Refund flow: API -> RefundService -> Gateway -> ledger write
+- Failures correlate with gateway timeouts > 8s (logs, Mar 3–10)
+
+**Ruled out:** database locking; ledger schema mismatches.
+
+**Open questions:** does the new RetryPolicy retry non-idempotent calls?
+
+**Re-read before relying on:** payments/gateway.py, payments/retry.py
+(both rewritten since the original analysis)
+```
+
+The new session starts with the summary and reads the current files when it needs them. Durable knowledge carries over, and stale tool output doesn't.
+
+The same idea shows up elsewhere in the course: keeping key findings in a scratchpad file that survives context boundaries (Lesson 5.5), and exporting state to a manifest for crash recovery.
+
+## Forking: exploring alternatives from a shared baseline
+
+Sometimes you don't want to continue one line of work. You want to compare two. Say the agent has spent an hour analyzing a codebase, and you want to evaluate two testing strategies, heavy unit-test mocking versus containerized integration tests, without repeating the analysis for each.
+
+A **fork** creates a **new, independent session that starts with a copy** of the original's history. Each branch then goes its own way, and the original is left untouched:
+
+```
+                     +--> fork A: "plan a mocking-based unit test strategy"
+shared analysis -----+
+  (original)         +--> fork B: "plan a containerized integration strategy"
+```
+
+In the Agent SDK you set `fork_session=True` (Python) or `forkSession: true` (TypeScript) alongside `resume`. In the CLI, you add `--fork-session` to `--resume`:
+
+```python
+fork_options = ClaudeAgentOptions(
+    resume=analysis_session_id,
+    fork_session=True,   # new session ID; the original is unchanged
+)
+```
+
+<Callout type="warning" title="Forks branch the conversation, not the files">
+A fork copies the **history**, not the working directory. If fork A edits files, those edits are real, and fork B sees them if it works in the same directory. When forks will change code, give each one its own copy of the code, such as a separate git worktree or checkout, or use file checkpointing. Otherwise the "independent" branches interfere with each other.
+</Callout>
+
+## Choosing the approach
+
+| Situation | Approach |
+|---|---|
+| Continuing tomorrow; little or nothing changed | `--resume <session-name>` |
+| Continuing, and a few known files changed | Resume **and** list the specific changed files for targeted re-analysis |
+| Much of the analyzed code changed, or the resumed agent is contradicting itself | **New session** with an injected structured summary |
+| Comparing two approaches built on the same analysis | **Fork** the analysis session (separate working copies if forks edit files) |
+| One short task with no follow-up | Nothing extra: a single session |
+
+The underlying question is always: **how much of the prior context is still true?** Mostly true → resume. Partly true in known places → resume and name the changes. Mostly stale → start fresh with a summary.
+
+## How this shows up on the exam
+
+- **"Continue yesterday's named investigation"** → `claude --resume <session-name>`. Watch for distractors: `--continue` only takes the most recent session, and invented flags like `--session` or `--load` don't exist.
+- **"A few files changed since the last session"** → tell the resumed session which files changed so it can re-analyze them, rather than re-exploring everything or saying nothing.
+- **"After major changes, the resumed session references code that no longer exists"** → start a new session with a structured summary instead of resuming with stale tool results.
+- **"Compare two approaches from the same analysis"** → `fork_session`. Remember that forks don't isolate the filesystem.
+
+<KeyTakeaways>
+
+- Sessions save the **conversation**, including old tool results, not the current state of the code.
+- **Named sessions:** `claude -n <name>` to start, `claude --resume <name>` to return. `--continue` only resumes the most recent session.
+- After code changes, **tell the resumed session exactly which files changed** for targeted re-analysis.
+- When most prior tool results are stale, **start fresh with a structured summary**. It's more reliable than resuming.
+- **`fork_session`** / `--fork-session` branches from a shared baseline to explore alternatives. The original is unchanged, and the filesystem is **not** forked.
+
+</KeyTakeaways>

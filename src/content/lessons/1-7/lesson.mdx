@@ -1,0 +1,157 @@
+## Hooks: code that runs inside the loop
+
+Lesson 1.6 used a `PreToolUse` hook as a prerequisite gate. This lesson covers hooks properly, the subject of Task Statement 1.5. A **hook** is your own code that the Agent SDK calls at specific points in the agentic loop. The two that matter most for the exam sit on either side of every tool call:
+
+```
+model requests a tool
+        |
+        v
+  PreToolUse hook  --deny-->  tool never runs; model gets the reason
+        | allow
+        v
+    tool executes
+        |
+        v
+  PostToolUse hook  -->  can replace the result the model sees
+        |
+        v
+  model reads the (possibly transformed) result
+```
+
+- **`PreToolUse`** runs **before** a tool executes. It can **allow**, **deny**, or **modify** the call. Use it to enforce rules on outgoing actions.
+- **`PostToolUse`** runs **after** a tool returns and **before the model sees the result**. It can **replace** the output or **add context**. Use it to clean up and normalize incoming data.
+
+Hooks are the guide's standard example of **deterministic guarantees**. The model never decides whether they run: every matching tool call passes through them.
+
+## PostToolUse: normalize data before the model sees it
+
+Real agents talk to many backends, and backends disagree about formats. Suppose a support agent uses three MCP tools:
+
+| Tool | How it reports a date | How it reports status |
+|---|---|---|
+| `lookup_order` | Unix timestamp: `1726000000` | `"SHIPPED"` |
+| `get_shipment` | ISO 8601 with offset: `"2024-09-10T16:26:40-04:00"` | `"in_transit"` |
+| `get_payment` | ISO 8601 date: `"2024-09-10"` | Numeric code: `3` |
+
+All three dates refer to the same day. The model has to:
+
+- convert `1726000000` to a date in its head, which it can get wrong,
+- compare timestamps across time zones to decide whether an order is within a 30-day return window, and
+- guess what payment status `3` means, which it has no reliable way to know.
+
+Each of those is a chance for a confident, wrong answer: "Your order is outside the return window," or "Your payment failed" when status `3` actually means "pending review."
+
+A prompt instruction like "convert all timestamps to dates" is **probabilistic**, and it spends the model's reasoning on bookkeeping. A `PostToolUse` hook fixes the data **before** the model reads it, the same way on every call:
+
+```python
+import json
+from datetime import datetime, timezone
+
+PAYMENT_STATUS = {1: "authorized", 2: "captured",
+                  3: "pending_review", 4: "declined"}
+
+def to_iso_utc(value):
+    if isinstance(value, (int, float)):          # Unix timestamp
+        dt = datetime.fromtimestamp(value, tz=timezone.utc)
+    else:                                        # ISO 8601 string
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
+
+def normalize_record(record: dict) -> dict:
+    out = dict(record)
+    for key in ("created_at", "shipped_at", "updated_at"):
+        if key in out and out[key] is not None:
+            out[key] = to_iso_utc(out[key])
+    if isinstance(out.get("status"), int):
+        code = out["status"]
+        out["status"] = PAYMENT_STATUS.get(code, f"unknown_{code}")
+    return out
+
+async def normalize_tool_output(input_data, tool_use_id, context):
+    # Field name differs across SDK versions (see note below)
+    raw = input_data.get("tool_response", input_data.get("tool_output"))
+    record = extract_json(raw)   # your helper: pull out the JSON payload
+    if record is None:
+        return {}                # leave unrecognized output unchanged
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": input_data["hook_event_name"],
+            "updatedToolOutput": normalize_record(record),
+        }
+    }
+```
+
+Registered with a matcher for the backend tools (MCP tools are named `mcp__<server>__<tool>`), every result the model reads now uses **one date format (ISO 8601, UTC)** and **human-readable statuses**.
+
+<Callout type="note" title="API detail">
+The exact field names in hook input and output have changed between SDK versions. The tool's result appears as `tool_response` in the hooks reference and as `tool_output` in some Python type definitions. `updatedToolOutput` replaces output for any tool, while the older `updatedMCPToolOutput` is deprecated. Check the reference for your SDK version. The exam tests the **pattern**: transform in `PostToolUse` before the model processes the result.
+</Callout>
+
+Normalization isn't the only use. A `PostToolUse` hook can also **trim** a 40-field order record down to the handful of fields the agent needs (Lesson 5.2), **redact** sensitive values before they enter the conversation, or **add context** with `additionalContext`, for example "Note: this customer has an open fraud flag."
+
+Why normalize in a hook rather than fixing the backends? Often you can't change them: they're third-party MCP servers, or other teams own them. The hook gives you one consistent format regardless of where the data came from.
+
+## PreToolUse: intercept actions that violate policy
+
+On the outgoing side, a `PreToolUse` hook sees the tool name and its **input** before anything runs. The guide's example is a business rule: **refunds over $500 are blocked and redirected to human escalation.**
+
+```python
+REFUND_LIMIT = 500.00
+
+async def enforce_refund_limit(input_data, tool_use_id, context):
+    amount = float(input_data["tool_input"].get("amount", 0))
+    if amount <= REFUND_LIMIT:
+        return {}
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": input_data["hook_event_name"],
+            "permissionDecision": "deny",
+            "permissionDecisionReason": (
+                f"Refunds over ${REFUND_LIMIT:.0f} need human approval. "
+                "Do not retry. Call escalate_to_human with the "
+                "customer ID, amount, root cause, and recommended action."
+            ),
+        }
+    }
+```
+
+Two design choices make this more than a wall:
+
+- **It redirects instead of just refusing.** The deny reason names the alternative workflow, escalation with a structured handoff (Lesson 1.6), so the agent moves forward instead of retrying or giving up.
+- **It checks the actual input.** The hook reads the real `amount` argument. It doesn't depend on the model having correctly remembered the policy.
+
+If the redirect itself must be guaranteed, the hook can do the side effect directly, for example opening the escalation ticket before denying, and then tell the model the case is escalated.
+
+Other common interception rules include blocking writes to protected paths, rejecting shell commands that match dangerous patterns, and requiring a verified customer before account changes. `PreToolUse` can also **modify** input: it can return `updatedInput` to, say, clamp a page size or send file writes to a sandbox directory.
+
+## Choosing hooks vs prompt instructions
+
+The guide keeps coming back to the same distinction: **hooks give deterministic guarantees. Prompt instructions give probabilistic compliance.**
+
+| Requirement | Mechanism |
+|---|---|
+| A business rule must **always** hold (money limits, identity checks, compliance) | `PreToolUse` hook |
+| Tool data must **always** reach the model in a consistent format | `PostToolUse` hook |
+| Sensitive data must **never** enter the model's context | `PostToolUse` hook (redact) |
+| Tone, phrasing, level of detail | Prompt instructions |
+| Judgment calls (which tool fits this request) | Prompt and tool descriptions |
+
+Keep the prompt guidance even where a hook enforces the rule. A model that knows about the $500 limit escalates directly instead of making a doomed `process_refund` call first. The hook is the guarantee. The prompt makes the agent efficient.
+
+## How this shows up on the exam
+
+- **"The agent misreads dates, statuses, or codes from some tools"** → a `PostToolUse` hook that normalizes the data before the model processes it. Distractors: prompt instructions to convert, few-shot conversions, a bigger model, asking the vendor to change their API.
+- **"A policy-violating action must never happen"** → a `PreToolUse` hook that denies it and redirects to the right workflow. A `PostToolUse` check is too late, because the action already happened.
+- **"Should this be a hook or a prompt?"** → a hook when compliance or consistency must be **guaranteed**, a prompt for style and judgment.
+
+<KeyTakeaways>
+
+- **`PreToolUse`** runs before a tool executes and can allow, **deny**, or modify the call. It's for enforcing rules on outgoing actions.
+- **`PostToolUse`** runs after a tool returns and **before the model sees the result**. It's for normalizing, trimming, or redacting incoming data.
+- Normalize heterogeneous formats (Unix timestamps, ISO 8601, numeric status codes) in a `PostToolUse` hook so every result reaches the model in one consistent format.
+- Block policy violations (refunds over $500) in a `PreToolUse` hook, and **redirect** through the deny reason to the right workflow, such as human escalation.
+- Hooks are **deterministic** and prompts are **probabilistic**. Choose hooks when a rule must be guaranteed, and keep prompt guidance for efficiency.
+
+</KeyTakeaways>
