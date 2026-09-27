@@ -1,3 +1,6 @@
+import { InvestigateVsEscalateNow } from "./diagrams/InvestigateVsEscalateNow";
+import { AskDontGuess } from "./diagrams/AskDontGuess";
+
 ## Knowing when to hand off
 
 A support agent that escalates too often is expensive and useless: humans end up doing the work anyway. One that escalates too rarely is dangerous: it improvises refunds outside policy, argues with customers who asked for a person, and guesses which account a caller means. Task Statement 5.2 is about drawing that line precisely, and about resolving ambiguity by **asking** rather than **guessing**.
@@ -34,6 +37,10 @@ that?"
 ```
 
 The guide's pattern: **acknowledge the frustration and offer resolution when the issue is within the agent's capability, and escalate only if the customer reiterates** that they want a human. Frustration alone isn't a request for a person, and many frustrated customers would rather have the problem fixed in the next minute than wait for a queue.
+
+<Figure caption="Investigating first delays a request the customer already made; escalating right away honors it.">
+  <InvestigateVsEscalateNow />
+</Figure>
 
 ## Policy gaps: escalate what policy doesn't cover
 
@@ -93,6 +100,10 @@ Right: "I found more than one account under that name.
 ```
 
 Guessing risks disclosing one customer's data to another, or refunding the wrong account. The cost of one clarifying question is tiny by comparison. Put this rule explicitly in the agent's instructions.
+
+<Figure caption="A heuristic guess risks the wrong account; asking for one more identifier confirms it.">
+  <AskDontGuess />
+</Figure>
 
 ## How this shows up on the exam
 
