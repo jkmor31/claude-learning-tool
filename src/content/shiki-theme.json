@@ -1,0 +1,40 @@
+{
+  "light": {
+    "name": "ccarf-light",
+    "type": "light",
+    "colors": {
+      "editor.background": "#faf9f7",
+      "editor.foreground": "#1f1e1c"
+    },
+    "tokenColors": [
+      { "scope": ["comment"], "settings": { "foreground": "#6b6862", "fontStyle": "italic" } },
+      { "scope": ["string", "string.template", "string.regexp"], "settings": { "foreground": "#2f7d4f" } },
+      { "scope": ["constant.numeric", "constant.language", "constant.character", "constant.other"], "settings": { "foreground": "#c96442" } },
+      { "scope": ["keyword", "keyword.control", "storage.type", "storage.modifier"], "settings": { "foreground": "#c96442", "fontStyle": "bold" } },
+      { "scope": ["entity.name.function", "support.function", "meta.function-call"], "settings": { "foreground": "#1f1e1c", "fontStyle": "bold" } },
+      { "scope": ["entity.name.tag"], "settings": { "foreground": "#c96442" } },
+      { "scope": ["entity.other.attribute-name"], "settings": { "foreground": "#2f7d4f" } },
+      { "scope": ["variable", "variable.parameter", "variable.other"], "settings": { "foreground": "#1f1e1c" } },
+      { "scope": ["punctuation", "meta.brace", "punctuation.definition"], "settings": { "foreground": "#6b6862" } }
+    ]
+  },
+  "dark": {
+    "name": "ccarf-dark",
+    "type": "dark",
+    "colors": {
+      "editor.background": "#171614",
+      "editor.foreground": "#ecebe8"
+    },
+    "tokenColors": [
+      { "scope": ["comment"], "settings": { "foreground": "#a19d96", "fontStyle": "italic" } },
+      { "scope": ["string", "string.template", "string.regexp"], "settings": { "foreground": "#6cc38f" } },
+      { "scope": ["constant.numeric", "constant.language", "constant.character", "constant.other"], "settings": { "foreground": "#e08563" } },
+      { "scope": ["keyword", "keyword.control", "storage.type", "storage.modifier"], "settings": { "foreground": "#e08563", "fontStyle": "bold" } },
+      { "scope": ["entity.name.function", "support.function", "meta.function-call"], "settings": { "foreground": "#ecebe8", "fontStyle": "bold" } },
+      { "scope": ["entity.name.tag"], "settings": { "foreground": "#e08563" } },
+      { "scope": ["entity.other.attribute-name"], "settings": { "foreground": "#6cc38f" } },
+      { "scope": ["variable", "variable.parameter", "variable.other"], "settings": { "foreground": "#ecebe8" } },
+      { "scope": ["punctuation", "meta.brace", "punctuation.definition"], "settings": { "foreground": "#a19d96" } }
+    ]
+  }
+}
