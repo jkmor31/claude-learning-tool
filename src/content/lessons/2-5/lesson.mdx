@@ -1,3 +1,6 @@
+import { VarExpansion } from "./diagrams/VarExpansion";
+import { CombinedTools } from "./diagrams/CombinedTools";
+
 ## Where an MCP server is configured matters
 
 The Model Context Protocol (MCP) lets Claude Code and the Agent SDK connect to external systems like GitHub, Jira, databases, and your own internal services. Each server contributes tools to the agent. Lessons 2.1–2.4 were about designing those tools. This lesson is about **wiring servers in**: where the configuration lives, who shares it, and how credentials get to the server without ending up in git. That's the first half of Task Statement 2.4.
@@ -64,6 +67,10 @@ The `.mcp.json` file is committed, so a token pasted into it would be committed 
 - The **value** stays in each developer's environment (a shell profile, a secrets manager, or a git-ignored `.env` loaded into the shell).
 - Each teammate authenticates as **themselves**, so actions in GitHub or Jira are attributed to the right person and limited to their own permissions.
 
+<Figure caption="The committed file names the credential; each developer's environment supplies their own value.">
+  <VarExpansion />
+</Figure>
+
 Expansion works in `command`, `args`, and `env` for stdio servers, and `url` and `headers` for HTTP servers. `${VAR:-default}` supplies a fallback when the variable is unset, which is handy for non-secret values like a base URL. Don't give secrets a default, because then the default *is* a committed secret.
 
 <Callout type="warning" title="The anti-patterns">
@@ -75,6 +82,10 @@ Expansion works in `command`, `args`, and `env` for stdio servers, and `url` and
 ## All servers' tools arrive at once
 
 When Claude Code (or an Agent SDK agent) starts, it connects to **every configured server** and discovers their tools at connection time. The tools from all servers are then **available simultaneously**. The agent doesn't pick a server first. It sees one combined list of tools, named like `mcp__github__create_issue` and `mcp__issues__search`, alongside the built-in tools.
+
+<Figure caption="Every configured server's tools join the built-ins in one list the agent sees at once.">
+  <CombinedTools />
+</Figure>
 
 This connects back to earlier lessons:
 

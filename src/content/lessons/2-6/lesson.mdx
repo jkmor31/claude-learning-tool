@@ -1,3 +1,6 @@
+import { CatalogVsExploration } from "./diagrams/CatalogVsExploration";
+import { DescriptionVsGrep } from "./diagrams/DescriptionVsGrep";
+
 ## Beyond tools
 
 Lesson 2.5 covered wiring MCP servers in. This lesson finishes Task Statement 2.4 with three design decisions you make once a server is connected:
@@ -31,6 +34,10 @@ read_doc("/docs/api/billing/v2.md")  -> right one
 ```
 
 That's five calls, several thousand tokens of intermediate results, and one wrong turn, just to learn *where things are*. Now suppose the server exposes a **resource** that is a catalog of the documentation hierarchy, with each page's title, path, status, and one-line summary. The agent (or the client on its behalf) reads the catalog once and goes straight to `billing/v2.md`.
+
+<Figure caption="A catalog resource shows what exists up front, so the agent skips the exploratory calls.">
+  <CatalogVsExploration />
+</Figure>
 
 That's the guide's point: **resources expose content catalogs so the agent can see what data is available without exploratory tool calls.** The guide's examples show the kinds of content that fit well:
 
@@ -68,6 +75,10 @@ Use Grep for free-text searches such as log messages.
 ```
 
 It says what the tool does, what it returns, when to prefer it over `Grep`, and when **not** to use it. Removing `Grep` altogether is usually the wrong fix, because `Grep` is still the right tool for free-text searches.
+
+<Figure caption="With a detailed description, the agent picks find_symbol for symbol questions and keeps Grep for free text.">
+  <DescriptionVsGrep />
+</Figure>
 
 ## Build or buy?
 

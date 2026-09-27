@@ -1,3 +1,6 @@
+import { GrepVsGlob } from "./diagrams/GrepVsGlob";
+import { WrapperTrace } from "./diagrams/WrapperTrace";
+
 ## Six tools, one question each
 
 Claude Code and the Agent SDK ship with a set of built-in tools. Task Statement 2.5 covers the six that do most of the work on a codebase. Each answers a different question:
@@ -21,6 +24,10 @@ This is the most tested distinction:
 - **Glob matches file paths** against a naming pattern. "Find all the test files" (`**/*.test.tsx`) is a Glob question.
 
 A quick check: if the thing you're looking for is **inside** files, use Grep. If it's in the **filename or folder structure**, use Glob. Glob can't find a function name, because it never opens files. Grep is the wrong way to find every `.test.tsx` file, because the extension isn't text inside the files.
+
+<Figure caption="Glob matches the file's path without opening it; Grep matches text inside it.">
+  <GrepVsGlob />
+</Figure>
 
 Useful options to know about:
 
@@ -95,6 +102,10 @@ export * from "./refunds";
 ```
 
 If you Grep only for `chargeCard`, you'll miss every caller that imports `legacyCharge`. The guide's technique: **first identify all the names the module exports** (read the wrapper, and follow any `export *`), **then Grep for each name** across the codebase. Only the union of those searches is the complete set of callers.
+
+<Figure caption="Callers that import an alias only show up when you Grep for every exported name.">
+  <WrapperTrace />
+</Figure>
 
 ## How this shows up on the exam
 
