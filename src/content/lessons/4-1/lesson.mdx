@@ -1,3 +1,5 @@
+import { TrustErosion } from "./diagrams/TrustErosion";
+
 ## Precision is a design problem
 
 Domain 4 is 20% of the exam, and it's about getting **reliable** output from Claude: output that's accurate, consistently shaped, and trustworthy enough to automate. It starts with the most common failure in review and classification systems: **too many false positives**.
@@ -55,6 +57,10 @@ This is better than both extremes:
 
 - **Keeping the noisy category** keeps eroding trust in everything.
 - **Turning the bot off** throws away the categories that were working.
+
+<Figure caption="One noisy category collapses trust in the reliable ones; disabling it lets trust recover.">
+  <TrustErosion />
+</Figure>
 
 ## Consistent severity with concrete examples
 
