@@ -1,0 +1,116 @@
+## Six tools, one question each
+
+Claude Code and the Agent SDK ship with a set of built-in tools. Task Statement 2.5 covers the six that do most of the work on a codebase. Each answers a different question:
+
+| Tool | Question it answers | Example |
+|---|---|---|
+| **Grep** | "Which files **contain** this text?" | Every caller of `calculateTax`, every file that logs `"payment declined"` |
+| **Glob** | "Which files have **names** like this?" | `**/*.test.tsx`, `src/**/config.*` |
+| **Read** | "What's **in** this file?" | Load `billing/tax.ts` in full |
+| **Edit** | "Change **this exact text** to that." | Replace one function signature |
+| **Write** | "Make the file contain **exactly this**." | Create a new file, or rewrite one completely |
+| **Bash** | "Run a **command**." | Tests, builds, git, package managers |
+
+Most exam questions in this area come down to picking the right row.
+
+## Grep vs Glob: contents vs names
+
+This is the most tested distinction:
+
+- **Grep searches file contents** for a pattern: function names, error messages, import statements. "Where is `parseInvoice` called?" is a Grep question.
+- **Glob matches file paths** against a naming pattern. "Find all the test files" (`**/*.test.tsx`) is a Glob question.
+
+A quick check: if the thing you're looking for is **inside** files, use Grep. If it's in the **filename or folder structure**, use Glob. Glob can't find a function name, because it never opens files. Grep is the wrong way to find every `.test.tsx` file, because the extension isn't text inside the files.
+
+Useful options to know about:
+
+- Grep uses ripgrep's regex syntax, can filter by file type or glob (`glob: "**/*.ts"`), and can return file names only, matching lines, or counts. Returning file names first, then reading the relevant ones, keeps context small.
+- Glob supports `**` for recursion and braces like `*.{json,yaml}`.
+
+## Read, Write, and Edit
+
+**Edit** is the default for changing existing code. It takes an `old_string` and a `new_string` and replaces the exact text. Two properties matter:
+
+- The `old_string` must match the file **exactly**, including whitespace and indentation.
+- It must be **unique** in the file. If the same text appears twice, Edit can't tell which one you mean, so it fails rather than guess.
+
+**Read** loads a file's full contents, and **Write** replaces a file's full contents. Together they're the fallback when Edit can't work: **when Edit fails because its anchor text isn't unique, Read the whole file, make the change, and Write the result back.** This is reliable because it doesn't depend on finding a unique anchor.
+
+```text
+Edit(old_string="  retries: 3,")        -> error: 4 matches
+Read("config/services.ts")              -> full contents
+Write("config/services.ts", updated)    -> only the payments
+                                           block changed
+```
+
+Two cautions with Write:
+
+- It replaces the **entire** file. If you Write from memory instead of from a fresh Read, you'll silently drop anything you didn't reproduce. Read first, change only what you mean to change, and write back the rest untouched.
+- For a small change in a large file, Edit is safer and cheaper. Treat Read + Write as the fallback, not the default.
+
+<Callout type="note" title="Real-world note: other ways past a non-unique match">
+In Claude Code, Edit also accepts `replace_all: true` for when *every* occurrence should change, and a longer `old_string` that includes surrounding lines is often enough to make the match unique. Claude Code also requires a file to have been read in the session before it's edited. The exam's answer for "Edit keeps failing on non-unique text" is Read + Write, and that's the one to pick when the options include it.
+</Callout>
+
+## Bash: for running things, not for reading files
+
+Bash runs commands: test suites, builds, linters, git, package managers. It *can* also run `cat`, `grep`, and `find`, but when a dedicated tool exists, prefer it:
+
+- The dedicated tools return structured, predictable output with limits applied, so a stray `cat` on a 5 MB log doesn't flood the context.
+- Permissions are easier to scope. You can allow Read, Grep, and Glob freely and require approval for Bash, since Bash can do almost anything (Lesson 2.3).
+- Their intent is clear in logs and hooks. A PreToolUse hook matching `Edit|Write` sees every file change, but it won't see `sed -i` inside Bash.
+
+## Exploring a codebase incrementally
+
+A common mistake when an agent faces an unfamiliar codebase is to **read everything up front**: dozens of files loaded "for context" before the agent knows what it's looking for. That burns context on irrelevant code and pushes the relevant parts into the middle of a long context, where they get less attention (Module 5).
+
+The guide's approach is incremental:
+
+1. **Grep to find entry points.** Search for the route, error message, or function name the task mentions.
+2. **Read those files** and see what they import and call.
+3. **Follow the imports**, reading the next files in the chain only as the trace needs them.
+4. **Stop when you understand the flow**, not when you've read the folder.
+
+```text
+Task: "Checkout sometimes shows 'Payment declined' for valid cards"
+
+Grep "Payment declined"        -> src/ui/checkout/errors.ts
+Read errors.ts                 -> mapped from code DECLINED_GENERIC
+Grep "DECLINED_GENERIC"        -> src/payments/gateway.ts
+Read gateway.ts                -> set when retryCharge() times out
+Read src/payments/retry.ts     -> timeout is 800 ms  (found it)
+```
+
+That's five tool calls and three files, not the sixty-file `payments/` folder.
+
+## Tracing through wrapper modules
+
+Large codebases often re-export functions through wrapper or barrel modules, sometimes under different names:
+
+```ts
+// src/payments/index.ts
+export { chargeCard } from "./gateway";
+export { chargeCard as legacyCharge } from "./gateway";
+export * from "./refunds";
+```
+
+If you Grep only for `chargeCard`, you'll miss every caller that imports `legacyCharge`. The guide's technique: **first identify all the names the module exports** (read the wrapper, and follow any `export *`), **then Grep for each name** across the codebase. Only the union of those searches is the complete set of callers.
+
+## How this shows up on the exam
+
+- **Searching for text inside files** (callers, error messages, imports) → **Grep**.
+- **Finding files by name or extension** (`**/*.test.tsx`) → **Glob**.
+- **Edit fails with a non-unique match** → **Read** the full file, then **Write** it back with the change.
+- **Understanding an unfamiliar codebase** → Grep for entry points, then Read and follow imports. Reading every file first is the distractor.
+- **Callers missing through re-exports** → list every exported name from the wrapper, then Grep for each.
+
+<KeyTakeaways>
+
+- **Grep** searches file **contents**. **Glob** matches file **paths and names**.
+- **Edit** needs an exact, **unique** anchor. When the anchor isn't unique, fall back to **Read + Write**.
+- **Write** replaces the whole file, so always write back from a fresh Read.
+- Prefer the dedicated tools over Bash for reading and searching. Use **Bash** for running commands.
+- Explore **incrementally**: Grep for entry points, Read, follow imports. Don't read everything up front.
+- Trace through wrapper modules by collecting **all exported names** first, then Grepping for each.
+
+</KeyTakeaways>

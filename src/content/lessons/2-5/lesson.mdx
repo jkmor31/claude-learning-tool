@@ -1,0 +1,108 @@
+## Where an MCP server is configured matters
+
+The Model Context Protocol (MCP) lets Claude Code and the Agent SDK connect to external systems like GitHub, Jira, databases, and your own internal services. Each server contributes tools to the agent. Lessons 2.1–2.4 were about designing those tools. This lesson is about **wiring servers in**: where the configuration lives, who shares it, and how credentials get to the server without ending up in git. That's the first half of Task Statement 2.4.
+
+## Two scopes the exam cares about
+
+| | Project scope | User scope |
+|---|---|---|
+| File | `.mcp.json` at the repo root | `~/.claude.json` in your home directory |
+| In version control? | **Yes**, committed with the code | **No**, lives on your machine only |
+| Who gets it | Everyone who clones the repo | Only you, in every project |
+| Use for | **Shared team tooling**: the GitHub, Jira, or database server the whole team relies on | **Personal or experimental** servers: something you're trying out, or a tool only you use |
+
+The decision rule is the same one you'll see again for `CLAUDE.md` in Module 3: **if teammates need it, it goes in the project; if it's just for you, it goes in your user config.**
+
+Two common mistakes the exam likes:
+
+- A new teammate says "Claude can't see our Jira tools." The server was added to **one developer's `~/.claude.json`**, so it never reached anyone else. The fix is to move it into the project's `.mcp.json`.
+- Someone commits an experimental server they're evaluating to `.mcp.json`, and now every teammate gets prompted to approve it. Experiments belong in user scope until the team agrees to adopt them.
+
+<Callout type="note" title="Real-world note: the third scope">
+Claude Code actually has three scopes. The default for `claude mcp add` is **local** scope: private to you *and* limited to the current project, and also stored in `~/.claude.json` under that project's entry. **User** scope (`--scope user`) makes a server available in all your projects. **Project** scope (`--scope project`) writes `.mcp.json`. If the same server name appears in more than one place, local wins over project, and project wins over user. The exam's two-way split (shared `.mcp.json` vs personal `~/.claude.json`) is the part to know cold.
+</Callout>
+
+## What `.mcp.json` looks like
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@example/github-mcp-server"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "issues": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ISSUES_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+The first server is a **stdio** server: Claude Code launches it as a local process. The second is a remote **HTTP** server. Either kind can live in either scope.
+
+You can write this file by hand or generate it:
+
+```bash
+claude mcp add --scope project --transport http \
+  issues https://mcp.example.com/mcp
+claude mcp add --scope user --transport stdio \
+  scratch -- python ~/tools/scratch_server.py
+```
+
+## Credentials: `${VAR}` expansion, never literal secrets
+
+The `.mcp.json` file is committed, so a token pasted into it would be committed too, and visible to anyone with repo access (or everyone, for a public repo). **Environment variable expansion** solves this. Claude Code replaces `${GITHUB_TOKEN}` with the value of the `GITHUB_TOKEN` environment variable when it starts the server.
+
+- The **file** is shared and says *which* credential each server needs.
+- The **value** stays in each developer's environment (a shell profile, a secrets manager, or a git-ignored `.env` loaded into the shell).
+- Each teammate authenticates as **themselves**, so actions in GitHub or Jira are attributed to the right person and limited to their own permissions.
+
+Expansion works in `command`, `args`, and `env` for stdio servers, and `url` and `headers` for HTTP servers. `${VAR:-default}` supplies a fallback when the variable is unset, which is handy for non-secret values like a base URL. Don't give secrets a default, because then the default *is* a committed secret.
+
+<Callout type="warning" title="The anti-patterns">
+- **A literal token in `.mcp.json`.** It's now in git history. Rotating the token is mandatory; deleting the line isn't enough.
+- **Moving the whole server to `~/.claude.json` to hide the token.** The secret is safe, but teammates lose the shared server. Keep the server in the project and move only the *value* into an environment variable.
+- **One shared "team token" in everyone's environment.** It works, but every action is attributed to one account, and that account needs everyone's combined permissions.
+</Callout>
+
+## All servers' tools arrive at once
+
+When Claude Code (or an Agent SDK agent) starts, it connects to **every configured server** and discovers their tools at connection time. The tools from all servers are then **available simultaneously**. The agent doesn't pick a server first. It sees one combined list of tools, named like `mcp__github__create_issue` and `mcp__issues__search`, alongside the built-in tools.
+
+This connects back to earlier lessons:
+
+- **Tool selection gets harder as servers pile up** (Lesson 2.3). Five servers with eight tools each is 40 tools plus the built-ins. Configure the servers a project actually needs, and in the SDK use `allowedTools` to give each agent only the MCP tools its role needs.
+- **Descriptions compete across servers** (Lesson 2.1). Two servers that each expose a `search` tool will confuse the model unless their descriptions draw a clear boundary.
+- **Built-in tools compete too.** If an MCP `search_code` tool understands your monorepo's symbols but its description is one vague line, the agent will keep reaching for the built-in `Grep`, which it knows well. The fix is a description that explains what the MCP tool can do that `Grep` can't, and what it returns. Lesson 2.6 returns to this.
+
+The same config shape carries over to the Agent SDK, where you pass servers in the `mcpServers` option and allow their tools by their `mcp__server__tool` names.
+
+<Callout type="note" title="Real-world note: approvals and deferred loading">
+In interactive sessions, Claude Code asks each developer to approve project-scoped servers from `.mcp.json` before using them, since a cloned repo could otherwise launch arbitrary commands (`claude mcp reset-project-choices` clears those answers). Non-interactive runs such as `claude -p` and the Agent SDK load them without asking. Recent versions can also defer loading full tool definitions when many tools are configured, and search for them on demand. That's an optimization; conceptually, every configured server's tools are still available to the agent.
+</Callout>
+
+## How this shows up on the exam
+
+- **"Teammates don't have the server"** → it's in someone's `~/.claude.json`. Move it to the project's `.mcp.json`.
+- **"The token is in the committed config"** → replace it with `${VAR}` expansion and rotate the token. Don't move the shared server to user scope to hide it.
+- **"I want to try a new server without affecting the team"** → user scope (`~/.claude.json`).
+- **"Which tools can the agent use?"** → all tools from all configured servers, discovered at connection time, at once. Too many is a tool-selection problem you solve with scoping.
+- **"The agent uses Grep instead of our MCP search tool"** → improve the MCP tool's description (Lesson 2.6).
+
+<KeyTakeaways>
+
+- **Project scope** (`.mcp.json`, committed): shared team servers. **User scope** (`~/.claude.json`, not committed): personal and experimental servers.
+- Put **`${VAR}` references** in `.mcp.json`, never literal secrets. The file says which credential is needed; each developer's environment supplies the value.
+- A committed secret has to be **rotated**, not just deleted.
+- Tools from **all** configured servers are discovered at connection time and available **simultaneously**, alongside the built-ins.
+- More servers means more tools competing for selection. Keep the configured set lean and scope tools per agent.
+- Real-world: Claude Code's default `claude mcp add` scope is **local** (private, one project), and project servers need approval in interactive sessions.
+
+</KeyTakeaways>

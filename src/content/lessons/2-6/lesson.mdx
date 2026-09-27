@@ -1,0 +1,103 @@
+## Beyond tools
+
+Lesson 2.5 covered wiring MCP servers in. This lesson finishes Task Statement 2.4 with three design decisions you make once a server is connected:
+
+1. **What to expose as a resource** instead of making the agent discover it with tool calls.
+2. **How to describe MCP tools** so the agent actually uses them instead of falling back to built-ins.
+3. **Whether to build a server at all**, or use an existing one.
+
+## MCP's three kinds of capability
+
+An MCP server can offer more than tools:
+
+| Primitive | What it is | Who drives it |
+|---|---|---|
+| **Tools** | Actions the agent calls, with arguments: `create_issue`, `run_query` | The model decides when to call them |
+| **Resources** | Content the server exposes by URI: a document, a schema, a list of issues | The client application, which can put them in front of the model |
+| **Prompts** | Reusable prompt templates, such as "summarize this incident" | The user, who picks them (in Claude Code, as slash commands) |
+
+The exam focuses on tools and resources. The idea to hold on to: **tools are for doing and querying; resources are for showing what's there.**
+
+## Resources as content catalogs
+
+Picture an agent asked to "update the docs for the billing API" with only tools available. Before it can do anything useful, it has to explore:
+
+```text
+list_directories("/docs")            -> 14 folders
+list_directories("/docs/api")        -> 9 folders
+search_docs("billing")               -> 31 hits
+read_doc("/docs/api/billing/v1.md")  -> deprecated, wrong one
+read_doc("/docs/api/billing/v2.md")  -> right one
+```
+
+That's five calls, several thousand tokens of intermediate results, and one wrong turn, just to learn *where things are*. Now suppose the server exposes a **resource** that is a catalog of the documentation hierarchy, with each page's title, path, status, and one-line summary. The agent (or the client on its behalf) reads the catalog once and goes straight to `billing/v2.md`.
+
+That's the guide's point: **resources expose content catalogs so the agent can see what data is available without exploratory tool calls.** The guide's examples show the kinds of content that fit well:
+
+- **Issue summaries**: open issues with IDs, titles, status, and owners, so the agent knows what exists before deciding which one to fetch in full.
+- **Documentation hierarchies**: the table of contents, not every page.
+- **Database schemas**: tables, columns, and relationships, so the agent writes a correct query the first time instead of probing with `SELECT *` and failing.
+
+A few design notes:
+
+- A catalog is a **map, not the territory**. Keep entries compact: identifiers plus enough description to choose. Full content stays behind a tool or a per-item resource.
+- Each resource has a **URI**, a name, a description, and a MIME type. Servers can also offer **resource templates** (URIs with parameters, like `issues://{id}`) for individual items.
+- Catalogs work best for content that **changes slowly** relative to a session. A live queue that changes every second is better served by a query tool.
+
+<Callout type="note" title="Real-world note: using resources in Claude Code">
+In Claude Code, you can reference a server's resources with `@` mentions, in the form `@server:protocol://path` (for example `@docs:file://api/billing`), and the content is attached to your message. Claude Code also gives the model tools to list and read MCP resources itself. Other MCP clients decide for themselves how to surface resources, which is why the protocol calls them application-controlled.
+</Callout>
+
+## Descriptions that beat the built-ins
+
+Here's a pattern the guide calls out specifically. A team builds an MCP tool, `find_symbol`, backed by their code-intelligence index. It understands generated code, cross-package references, and aliases. The agent ignores it and keeps using the built-in `Grep`.
+
+Why? The model knows `Grep` well, its description is clear, and it works reasonably often. The MCP tool's description says only "Find symbols." Given a vague unknown tool and a familiar one that seems to fit, the model picks the familiar one.
+
+The fix is the one from Lesson 2.1, applied to MCP: **write the description to explain the tool's capabilities and outputs in detail, including what it does better than the built-in.**
+
+```text
+find_symbol: Locate where a function, class, or type is defined
+and every place it's referenced, across all packages in the
+monorepo. Unlike text search, it resolves re-exports, import
+aliases, and generated code, and ignores matches in comments
+and strings. Returns definition location plus a list of
+references as {file, line, kind: "call"|"import"|"type"}.
+Use this for "where is X defined / who calls X" questions.
+Use Grep for free-text searches such as log messages.
+```
+
+It says what the tool does, what it returns, when to prefer it over `Grep`, and when **not** to use it. Removing `Grep` altogether is usually the wrong fix, because `Grep` is still the right tool for free-text searches.
+
+## Build or buy?
+
+Before writing a server, check whether one already exists. For **standard integrations** such as Jira, GitHub, Slack, Postgres, and common SaaS APIs, well-maintained community or vendor MCP servers usually exist. The guide's rule: **choose existing servers for standard integrations, and reserve custom servers for team-specific workflows.**
+
+| Use an existing server when… | Build a custom server when… |
+|---|---|
+| The system is widely used (Jira, GitHub, Postgres) | The workflow is specific to your team, like your deploy pipeline or internal approval process |
+| You need its general operations: search, create, update | You need a composite operation no generic server offers, such as "open an incident, page the on-call, link the runbook" |
+| A maintained implementation already handles auth, pagination, and API changes | You need domain-specific validation, structured errors, or narrow scoping (Lessons 2.2–2.3) that a generic server can't provide |
+
+Why default to existing servers? A custom Jira server means your team owns the auth flow, pagination, rate limits, API version changes, and security fixes forever, to reproduce something that already exists. That effort is better spent on the workflow nobody else can build for you.
+
+"Existing" doesn't mean "unreviewed." A third-party server runs with your credentials and can see your data, so evaluate its maintenance, permissions, and publisher before adopting it, and prefer official vendor servers where they exist.
+
+A reasonable middle ground: use the community server for standard operations, and add a small custom server alongside it for the handful of team-specific workflows.
+
+## How this shows up on the exam
+
+- **"The agent makes many exploratory calls to find what exists"** (listing, searching, reading the wrong item) → expose a **catalog resource** (issue summaries, doc hierarchy, schema).
+- **"The agent uses Grep instead of our more capable MCP tool"** → **improve the MCP tool's description** with its capabilities, outputs, and when to prefer it. Don't just remove `Grep`, and don't just add a system-prompt rule.
+- **"We need Jira/GitHub integration; should we build a server?"** → use an **existing** server. Build custom only for team-specific workflows.
+- Watch for distractors that load all the content up front, such as every doc page in the system prompt. A catalog gives visibility without that cost.
+
+<KeyTakeaways>
+
+- MCP servers offer **tools** (model-driven actions), **resources** (content exposed by URI), and **prompts** (user-selected templates).
+- Expose **content catalogs** (issue summaries, doc hierarchies, database schemas) as resources, so the agent can see what's available without exploratory tool calls.
+- Keep catalogs compact: identifiers plus enough description to choose. Full content stays behind a tool or per-item resource.
+- If the agent prefers `Grep` over a better MCP tool, **rewrite the MCP tool's description** to explain its capabilities, outputs, and when to use it instead.
+- Use **existing** MCP servers for standard integrations like Jira. Build **custom** servers for team-specific workflows.
+
+</KeyTakeaways>
