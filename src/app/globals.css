@@ -53,6 +53,11 @@
   padding: 0.5rem 1rem;
 }
 
+.prose blockquote p:first-of-type::before,
+.prose blockquote p:last-of-type::after {
+  content: none;
+}
+
 .prose summary {
   cursor: pointer;
   font-weight: 600;

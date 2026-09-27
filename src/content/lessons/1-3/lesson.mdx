@@ -1,0 +1,111 @@
+## Where Lesson 1.2 left off
+
+Lesson 1.2 set up the architecture: a coordinator at the hub, isolated subagents on the spokes, and every handoff flowing through the coordinator. This lesson covers the rest of Task Statement 1.2, which is about how a good coordinator **uses** that architecture. It rests on three skills:
+
+1. **Dynamic selection:** invoke only the subagents a request needs.
+2. **Partitioning:** give subagents non-overlapping assignments so they don't duplicate work.
+3. **Iterative refinement:** check the synthesized result for gaps, send targeted follow-up work, and repeat until coverage is sufficient.
+
+All three follow from one idea: the coordinator reasons about the work instead of running a fixed script.
+
+## Dynamic subagent selection
+
+A research pipeline might have search, document analysis, synthesis, and report subagents. That doesn't mean every request should go through all four. The guide asks for coordinators that **"analyze query requirements and dynamically select which subagents to invoke rather than always routing through the full pipeline."**
+
+| Request | What it actually needs |
+|---|---|
+| "When did the EU AI Act enter into force?" | One search. No analysis, synthesis, or report. |
+| "Summarize the findings of the three PDFs I attached." | Document analysis and a short synthesis. No web search. |
+| "Compare how four countries regulate facial recognition, with citations." | Parallel searches per country, analysis, synthesis, and a formatted report. |
+
+Running the full pipeline for the first request wastes calls, adds latency, and can make the answer worse: a one-line fact gets buried in a formatted report nobody asked for. Skipping stages the third request needs produces a thin, uncited answer. The coordinator's job is to **match the pipeline to the request.**
+
+How to make selection work:
+
+- **Describe each subagent's purpose clearly.** The coordinator chooses based on what it knows each subagent does. In the Agent SDK that's each subagent's `description` (Lesson 1.4).
+- **Tell the coordinator how to size the work.** Give criteria such as "Answer single factual questions from one search. Use document analysis only when the user provides or references documents. Produce a formatted report only when the user asks for one or the question spans several subtopics."
+- **Log which subagents each request used**, so you can tell whether simple requests are being over-processed or complex ones under-processed.
+
+<Callout type="exam">
+Symptom: "Simple questions take as long and cost as much as full research reports." Cause: a fixed pipeline. Fix: dynamic selection in the coordinator. Distractors usually treat the symptom (a cheaper model everywhere, caching) or remove a stage entirely, which breaks the complex requests.
+</Callout>
+
+## Partitioning scope to avoid duplication
+
+When the coordinator runs several subagents on one topic, it has to divide the work. If three search subagents all get the same assignment, "research renewable energy adoption," they'll run near-identical queries, find the same articles, and return overlapping findings. The run costs three times as much, the new information is barely more than one subagent would find, and the duplicates can make one source look like several independent confirmations.
+
+The guide's fix is to **partition the scope**, giving each subagent a distinct slice. The two most common ways to slice:
+
+- **By subtopic:** solar, wind, battery storage.
+- **By source type:** peer-reviewed research, industry reports, government statistics.
+
+Say the boundaries explicitly in each prompt. Subagents are isolated: they can't see each other's assignments, so an instruction like "avoid duplicating the other agents" gives them nothing to act on. Instead:
+
+> "Research **wind power** adoption trends from 2020 to 2025. Solar and battery storage are assigned to other researchers, so skip them unless a source compares them directly with wind."
+
+### Partitioning and decomposition are two halves of one rule
+
+Lesson 1.2 warned about **gaps**: a decomposition too narrow to cover the topic. Partitioning prevents **overlap**. A good split does both, which consultants call **MECE**: *mutually exclusive* (no two subagents do the same work) and *collectively exhaustive* (together they cover the whole question).
+
+| Failure | What it looks like | Fix |
+|---|---|---|
+| Overlap | Duplicate findings, wasted calls, one source counted as several | Partition by subtopic or source type, with explicit boundaries |
+| Gaps | Every subagent succeeds, and whole dimensions are missing | Map the topic's dimensions before splitting it (Lesson 1.2) |
+
+Fixing one doesn't fix the other. Non-overlapping assignments can still leave gaps, and complete coverage can still be wastefully redundant.
+
+## Iterative refinement loops
+
+Even a well-planned decomposition can come back uneven. One subtopic yields ten strong sources, another yields one weak blog post, and a key sub-question turns out to need its own investigation. A one-pass pipeline ships that unevenness. A **refinement loop** catches it:
+
+```
+decompose -> delegate searches/analysis -> synthesize
+                    ^                          |
+                    |                          v
+     targeted follow-up queries <- evaluate against coverage criteria
+                                               |
+                                               v
+                                  criteria met -> final result
+```
+
+The guide describes it: the coordinator **evaluates synthesis output for gaps, re-delegates to search and analysis subagents with targeted queries, and re-invokes synthesis until coverage is sufficient.**
+
+Three details make the loop work:
+
+1. **Explicit coverage criteria.** "Is this good enough?" is too vague to evaluate. "Every major dimension is covered by at least two independent sources, and every statistic has a date and a source" is something the coordinator can check.
+2. **Targeted follow-ups, not reruns.** If the costs section has one source, ask a search subagent specifically about costs. Rerunning the whole pipeline repeats work you already have and may create new gaps elsewhere.
+3. **Gaps get filled with evidence, not invention.** Never tell the synthesis subagent to "expand the thin section" from its own knowledge. That invites unsourced, possibly made-up claims into a report that promises citations. Missing evidence has to come from new research.
+
+### When does the loop stop?
+
+This mirrors Lesson 1.1's termination rules:
+
+- **Stop when the criteria pass.** The coordinator evaluates the result against the explicit criteria and finishes when they're met, whether that takes one round or several.
+- **Keep a backstop.** A maximum number of rounds protects against a gap that can't be filled, for example when no source exists. Hitting the backstop is not success: the output should **say which gaps remain** so the reader knows what's missing. (Lesson 5.4 covers reporting coverage gaps.)
+- **Don't stop on a fixed count** ("always do three rounds") or because the synthesis text says "coverage is complete." Those are the iteration-cap and natural-language-signal anti-patterns from Lesson 1.1 in a new setting.
+
+## Putting it together
+
+A coordinator prompt that applies all three skills might include:
+
+> "First decide what this request needs. Answer simple factual questions directly from one search. For broader questions, list the topic's major dimensions, then assign each search subagent a distinct dimension, and state what is out of scope for each. After synthesis, check the result: every dimension needs at least two independent, dated sources. For any dimension that falls short, send one targeted follow-up search for that dimension only, then re-synthesize. Stop when all dimensions pass, or after three follow-up rounds, and then list any remaining gaps in the final output."
+
+That prompt states **goals and quality criteria** instead of scripting every step, which is the style Lesson 1.5 covers in depth.
+
+## How this shows up on the exam
+
+- **Cost and latency on simple requests** → dynamic subagent selection.
+- **Duplicate findings or redundant subagent work** → partition by subtopic or source type, with explicit boundaries in each prompt. Telling agents to "avoid duplicates" doesn't work because they can't see each other.
+- **Gaps found after synthesis** → targeted re-delegation, then re-synthesis. Watch for distractors that rerun everything or have synthesis fill gaps from its own knowledge.
+- **Loop termination** → explicit coverage criteria, plus a backstop that reports what's still missing.
+
+<KeyTakeaways>
+
+- The coordinator should **match the pipeline to the request** instead of running every subagent every time.
+- **Partition** work by subtopic or source type, and state the boundaries in each prompt. Isolated subagents can't deduplicate among themselves.
+- A good split is **MECE**: no overlap (partitioning) and no gaps (dimension-first decomposition).
+- **Refinement loop:** synthesize, evaluate against explicit criteria, send *targeted* follow-ups, re-synthesize.
+- Fill gaps with **new evidence**, never by asking synthesis to fill them from its own knowledge.
+- Stop when the **criteria pass**, and keep a max-round backstop that **reports the remaining gaps**.
+
+</KeyTakeaways>
