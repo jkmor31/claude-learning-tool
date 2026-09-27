@@ -1,3 +1,5 @@
+import { WhereItBelongs } from "./diagrams/WhereItBelongs";
+
 ## The system
 
 Your team uses **Claude Code** every day for code generation, refactoring, debugging and documentation. Your job is to fit it into the team's workflow: shared `CLAUDE.md` configuration, custom slash commands, and good judgment about when to plan and when to just make the change.
@@ -47,6 +49,10 @@ This table is the core of the scenario. The question is always "who needs this, 
 | A repeatable workflow the team runs on demand | Project command in `.claude/commands/` | 3.3 |
 | A workflow with verbose output that shouldn't clutter the session, or with restricted tools | Skill with `context: fork` and `allowed-tools` | 3.4 |
 | A tool integration everyone needs | Project `.mcp.json`, credentials by env var | 2.5 |
+
+<Figure caption="Ask who needs it first, then what kind of thing it is; the answer names the file.">
+  <WhereItBelongs />
+</Figure>
 
 When a team member's Claude "ignores the conventions", the first thing to check is where the conventions live. If they're in the lead developer's `~/.claude/CLAUDE.md`, they never reach anyone else. Run `/memory` to see which files are loaded (Lesson 3.1).
 

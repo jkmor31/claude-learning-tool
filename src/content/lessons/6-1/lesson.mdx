@@ -1,3 +1,5 @@
+import { SupportArchitecture } from "./diagrams/SupportArchitecture";
+
 ## How the capstones work
 
 Each Module 6 lesson takes one of the six official exam scenarios and walks through it end to end, pulling together the lessons from Modules 1–5 that it draws on. On exam day you'll see four of these six scenarios, each framing a set of questions. The questions rarely test one fact in isolation. They describe a symptom in a running system and ask for the most effective fix, so you need to know how the pieces fit together.
@@ -19,31 +21,9 @@ The primary domains are **Agentic Architecture** (Domain 1), **Tool Design & MCP
 
 ## Reference architecture
 
-```text
-Customer message
-      |
-      v
-+-------------------------------------------------------------+
-| Agent loop (Agent SDK)                           Lesson 1.1 |
-|  system prompt: escalation criteria + few-shot     5.3, 4.2 |
-|  case facts block (outside summarized history)          5.1 |
-+-------------------------------------------------------------+
-      | tool calls                           ^ tool results
-      v                                      |
-+----------------------------+  +-----------------------------+
-|  PreToolUse hooks          |  |  PostToolUse hooks          |
-|   identity gate       1.6  |  |   trim to key fields   5.2  |
-|   refund limit        1.7  |  |   normalize formats    1.7  |
-+----------------------------+  +-----------------------------+
-      |                                      ^
-      v                                      |
-+-------------------------------------------------------------+
-| MCP server (custom)                         Lessons 2.1-2.5 |
-|  get_customer     lookup_order                              |
-|  process_refund   escalate_to_human                         |
-|  detailed descriptions, structured errors, env-var creds    |
-+-------------------------------------------------------------+
-```
+<Figure caption="Tool calls pass through PreToolUse gates on the way down, and results through PostToolUse hooks on the way back up.">
+  <SupportArchitecture />
+</Figure>
 
 Walk through it one layer at a time.
 

@@ -1,3 +1,5 @@
+import { DevhelperArchitecture } from "./diagrams/DevhelperArchitecture";
+
 ## The system
 
 You're building **developer productivity tools** with the Claude Agent SDK. The agent helps engineers **explore unfamiliar codebases**, **understand legacy systems**, **generate boilerplate** and **automate repetitive tasks**. It uses the built-in tools (Read, Write, Edit, Bash, Grep, Glob) and connects to MCP servers.
@@ -8,24 +10,9 @@ The primary domains are **Tool Design & MCP** (Domain 2), **Claude Code Configur
 
 Picture an internal assistant called `devhelper` at a fictional freight company whose core system is a 12-year-old Java monolith.
 
-```text
-devhelper (Agent SDK)
-  main agent       Read  Grep  Glob  Edit  Write  Bash  Task
-  |                goals, conventions, when to delegate       1.8, 3.7
-  |
-  +-- subagent: code-mapper    Read  Grep  Glob (read-only)   1.4, 2.3
-  |     answers one question, returns a summary               5.5
-  |
-  +-- MCP: github (existing server)                           2.6
-  +-- MCP: service-catalog (custom)                           2.6
-  |     resource: catalog of services, owners, entry points
-  |     tool:     find_symbol (resolves aliases, re-exports)
-  |
-  +-- hooks
-        PreToolUse   block writes outside the repo,
-                     block destructive Bash (force push, rm -rf)  1.7
-        PostToolUse  run the formatter after Edit/Write           1.7
-```
+<Figure caption="Only the main agent can change files, and hooks guard its calls; the code-mapper only reads and returns a summary.">
+  <DevhelperArchitecture />
+</Figure>
 
 ### Picking the right built-in tool
 
