@@ -1,3 +1,5 @@
+import { PathRuleTrigger } from "./diagrams/PathRuleTrigger";
+
 ## Conventions that belong to file types, not folders
 
 Some conventions follow a **kind of file** wherever it lives: every test file, every Terraform module, every database migration, every React component. Lesson 3.1's directory-level `CLAUDE.md` handles conventions that belong to a **folder**. For conventions that belong to a **file type scattered across folders**, Task Statement 3.3 has a better tool: **path-specific rules**.
@@ -22,6 +24,10 @@ paths:
 ```
 
 `paths` holds **glob patterns** (the same syntax as the Glob tool in Lesson 2.7). The rule **loads only when Claude is working with a file that matches**. Editing `src/cart/Cart.test.tsx` brings in the testing conventions. Editing `src/cart/Cart.tsx` doesn't.
+
+<Figure caption="One rule file, one pattern, and it triggers the same way in every folder that has a matching file.">
+  <PathRuleTrigger />
+</Figure>
 
 A rule **without** `paths` loads every session, like `CLAUDE.md`. That's the only difference, and it's what turns a rules folder from "organized" into "organized and efficient."
 

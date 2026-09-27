@@ -1,3 +1,6 @@
+import { SelfReviewVsIndependent } from "./diagrams/SelfReviewVsIndependent";
+import { ReReviewFlow } from "./diagrams/ReReviewFlow";
+
 ## A pipeline people actually trust
 
 Lesson 3.8 got Claude Code running in CI. Getting it **useful** is a different problem. A review bot that posts 30 comments per PR, repeats the same comments after every push, and flags its own code as fine gets muted within a week. A test generator that writes 40 trivial tests, half of which already exist, just adds maintenance.
@@ -23,6 +26,10 @@ Stronger: session A writes the feature
 
 This is Lesson 1.2's context isolation again, used for **independence** rather than tidiness.
 
+<Figure caption="The generating session's assumptions are exactly what it can't see past; a fresh instance has none to carry.">
+  <SelfReviewVsIndependent />
+</Figure>
+
 ## 2. Re-reviews: report only what's new or still open
 
 A PR gets reviewed, the author pushes fixes, and the review runs again. A naive re-review re-reports everything it finds, including the three issues already commented on and the two the author just fixed. Duplicate comments pile up, and developers learn to ignore the bot.
@@ -38,6 +45,10 @@ Review the diff since that review.
 ```
 
 With structured output (Lesson 3.8), the posting script can then resolve fixed threads and post only the new comments. The history of the review becomes an input, not something the bot rediscovers from scratch.
+
+<Figure caption="Prior findings travel with the PR, so each re-review reports only what's new or still open.">
+  <ReReviewFlow />
+</Figure>
 
 ## 3. Test generation: show the tests that already exist
 

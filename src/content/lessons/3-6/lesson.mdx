@@ -1,3 +1,5 @@
+import { PlanThenExecute } from "./diagrams/PlanThenExecute";
+
 ## Think first, or just do it?
 
 Claude Code can work two ways. In **direct execution**, it reads what it needs and starts changing files. In **plan mode**, it explores the codebase and proposes a plan, but **makes no edits** until you approve. Task Statement 3.4 is about choosing between them, and about keeping exploration from swamping your context along the way.
@@ -30,15 +32,11 @@ A quick test: **could a reasonable engineer do this task two meaningfully differ
 
 The two modes aren't rivals. The guide's recommended pattern for big work combines them: **plan mode for investigation, direct execution for implementation.**
 
-```text
-1. Plan mode   Explore the 45 files that use the old HTTP
-               client. Propose a migration approach, an
-               order, and risks. (No edits.)
-2. Review      You adjust: "Do the retry wrapper first,
-               and keep the old client behind a flag."
-3. Execute     Approve. Claude implements the agreed plan,
-               file by file, running tests as it goes.
-```
+<Figure caption="Plan mode explores and proposes with no edits; only after you approve does execution touch a file.">
+  <PlanThenExecute />
+</Figure>
+
+For a 45-file HTTP client migration, that looks like: plan mode explores the call sites and proposes an approach, order, and risks; you review and adjust ("do the retry wrapper first, and keep the old client behind a flag"); then execution implements the agreed plan file by file, running tests as it goes.
 
 Planning up front means execution is mostly mechanical, and you've already agreed on the decisions that would have been expensive to reverse.
 

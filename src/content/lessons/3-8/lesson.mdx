@@ -1,3 +1,6 @@
+import { PrintFlagOutcome } from "./diagrams/PrintFlagOutcome";
+import { StructuredFindingsFlow } from "./diagrams/StructuredFindingsFlow";
+
 ## Claude Code without a person at the keyboard
 
 Interactive Claude Code waits for you: to type the next message, approve a tool, or answer a question. A CI pipeline has nobody to do any of that. Task Statement 3.6 covers what changes when Claude Code runs **inside automation**: pull request reviews, test generation, changelog drafts, and nightly audits. This lesson covers the CLI mechanics; Lesson 3.9 covers designing the prompts.
@@ -11,6 +14,10 @@ claude -p "Summarize the changes in this PR and list risks"
 ```
 
 Without `-p`, Claude Code starts an interactive session and waits for input that will never arrive, so **the CI job hangs** until it times out. When a pipeline step "just sits there," a missing `-p` is the first thing to check.
+
+<Figure caption="The only difference between the two runs is the -p flag, and it's the difference between hanging and finishing.">
+  <PrintFlagOutcome />
+</Figure>
 
 `-p` reads standard input too, which makes it easy to pipe content in:
 
@@ -62,6 +69,10 @@ With a schema like this:
 ```
 
 Now a script can loop over `findings` and **post each one as an inline PR comment** on the right file and line. That's the guide's use case: **machine-parseable, structured findings for automated posting.** Without the schema, you'd be writing a fragile parser for prose that changes shape from run to run.
+
+<Figure caption="The schema turns a review into an array a script can loop over, with no prose parsing in between.">
+  <StructuredFindingsFlow />
+</Figure>
 
 ## A minimal GitHub Actions job
 
