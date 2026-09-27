@@ -1,0 +1,115 @@
+## The schema shapes the answers
+
+Lesson 4.4 used a JSON schema to guarantee the **shape** of extracted data. But a schema does more than check shape. It tells the model what it's **allowed** to say. A badly designed schema can push the model toward wrong answers, and a well-designed one gives it an honest way to say "not here," "not sure," or "something else." This lesson covers the schema design considerations in Task Statement 4.3.
+
+## Required fields invite fabrication
+
+Consider a contract-extraction schema where every field is required:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "party_a": { "type": "string" },
+    "party_b": { "type": "string" },
+    "effective_date": { "type": "string" },
+    "termination_notice_days": { "type": "integer" }
+  },
+  "required": ["party_a", "party_b", "effective_date",
+               "termination_notice_days"]
+}
+```
+
+Now give it a contract with no termination clause. The schema demands an integer. There's no way to answer truthfully, so the model does what the schema asks: it produces a **plausible value**, often 30, because that's a common notice period. The output is perfectly valid and silently wrong.
+
+The fix: **make fields optional (nullable) when source documents may not contain the information.** That removes the pressure to fabricate:
+
+```json
+"termination_notice_days": {
+  "type": ["integer", "null"],
+  "description":
+    "Notice days to terminate; null if no termination clause"
+}
+```
+
+Now `null` is a legitimate answer, and the description says when to use it. Downstream code can treat `null` as "not stated" and route the document for review, instead of trusting an invented 30.
+
+Use this judgment for each field:
+
+- **Always present in valid documents** (an invoice number on an invoice) → required, non-nullable.
+- **Sometimes absent** (a PO number, a termination clause, a middle name) → nullable.
+- **Absent means the document is suspect** → nullable, plus a check that flags the document when it's null.
+
+<Callout type="note" title="Real-world note: nullable under strict mode">
+With `strict: true` tools or structured outputs, every property typically has to be listed in `required`, with `additionalProperties: false`. You express "optional" by keeping the field required but allowing `null`, as in `"type": ["integer", "null"]`. The effect is the same, and arguably clearer: the model must always *decide* about the field, and `null` is an explicit decision rather than a silently missing key.
+</Callout>
+
+## Enums: closed lists with honest exits
+
+Enums keep categorical fields consistent: `"currency": {"enum": ["USD", "EUR", "GBP"]}` means you never get "US$" or "dollars." But a closed list has the same problem as a required field. When the true answer isn't on the list, the model must pick the **closest wrong one**. A Swiss franc invoice becomes "EUR."
+
+The guide gives two escape hatches:
+
+### `"other"` plus a detail field, for extensible categories
+
+```json
+"category": {
+  "type": "string",
+  "enum": ["hardware", "software", "services", "other"]
+},
+"category_detail": {
+  "type": ["string", "null"],
+  "description":
+    "If category is 'other', the real category; else null"
+}
+```
+
+The main field stays a clean enum that downstream code can switch on. The rare cases get recorded instead of forced. Review the `category_detail` values periodically: if "freight" shows up 200 times, it's time to add it to the enum.
+
+### `"unclear"`, for ambiguous cases
+
+```json
+"sentiment": {
+  "type": "string",
+  "enum": ["positive", "negative", "neutral", "unclear"]
+}
+```
+
+Some inputs genuinely can't be classified with confidence: sarcasm, mixed signals, text too short to judge. Without `"unclear"`, those get distributed randomly among the real labels, polluting your statistics. With it, they're isolated where a human or a second pass can look at them.
+
+"Unclear" and "other" answer different questions:
+
+| Value | Means | Example |
+|---|---|---|
+| `"other"` | "I know what this is, and it's **not on your list**." | An invoice in CHF when the list is USD, EUR, GBP |
+| `"unclear"` | "I **can't tell** which of your categories this is." | "Great, another update that breaks everything." Positive or negative? |
+
+## Putting it together
+
+A schema that follows these principles gives the model an honest way to express every situation it will meet:
+
+| Situation | Schema provides |
+|---|---|
+| The value is present | The typed field |
+| The value is absent | `null` on a nullable field |
+| The value doesn't fit the categories | `"other"` plus a detail field |
+| The value can't be determined | `"unclear"` |
+
+When none of those exits exist, the model fills the gap with a guess, and a guess inside a valid schema is the hardest error to catch.
+
+## How this shows up on the exam
+
+- **"The extractor invents values for fields some documents don't have"** → make those fields **nullable**; required fields push the model to fabricate.
+- **"New categories keep being forced into the wrong enum value"** → add **`"other"` plus a detail string**.
+- **"Ambiguous items are classified inconsistently"** → add an **`"unclear"`** enum value.
+- Distractors: "make the field required so it's never empty," instructions like "don't guess" without changing the schema, or growing the enum endlessly.
+
+<KeyTakeaways>
+
+- **Required fields pressure the model to fabricate** when the source lacks the information. Make such fields **nullable**.
+- Describe **when to use null** in the field description.
+- Use **`"other"` plus a detail field** for extensible categories, and review the details to evolve the enum.
+- Use **`"unclear"`** for cases that genuinely can't be classified.
+- A good schema gives the model an honest answer for **present, absent, uncategorized, and ambiguous** values.
+
+</KeyTakeaways>

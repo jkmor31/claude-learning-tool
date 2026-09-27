@@ -1,0 +1,80 @@
+## One reviewer, one pass, isn't enough at scale
+
+The last task statement in Domain 4 is about **architecture**, not wording: how to arrange review work across instances and passes so it catches more and contradicts itself less. Task Statement 4.6 has three ideas: **independent review instances**, **multi-pass review** (per-file passes plus integration passes), and **verification passes with self-reported confidence** for routing.
+
+## Why self-review falls short
+
+Lesson 3.9 met this in CI. Here's the principle behind it. When a model generates code and is then asked, in the same session, to review it, the review happens with the **generation reasoning still in context**: the assumptions it made, the approach it settled on, the edge cases it decided didn't matter. It's reviewing its own decisions with the same frame that produced them, so it's **less likely to question them**.
+
+The guide is specific about what *doesn't* fix this:
+
+- **Self-review instructions** ("critically review your work," "look for bugs you may have missed"). The reasoning context is still there.
+- **Extended thinking** in the same session. More reasoning *within* the same frame doesn't produce an outside view.
+
+What does fix it: **a second, independent Claude instance without the generator's reasoning context.** It receives the artifact (the diff, the code, the extraction) and the review criteria, but not the conversation that produced them.
+
+```text
+Generator instance          Reviewer instance
+------------------          -----------------
+task + reasoning            code + review criteria
+     |                            |
+     v                            v
+   code  ---- only the code ----> findings
+```
+
+The reviewer can't be anchored by reasoning it never saw. It's the same context isolation as coordinator and subagent (Lesson 1.2), used here to get an **unbiased second opinion**.
+
+## Multi-pass review: local, then integration
+
+The second problem is **scale**. Put 25 changed files into one review prompt and two things happen:
+
+- **Attention dilution.** Each file gets a thin slice of attention. Issues in files 9 through 17, in the middle of a long input, are especially likely to be missed.
+- **Contradictory findings.** Reasoning about many files at once, the review says a function "should validate input" in one comment and that the caller "already validates, remove the duplicate check" in another.
+
+The guide's architecture splits the work, as Lesson 1.8 previewed:
+
+1. **Per-file local passes.** Each file is reviewed on its own (in parallel, often as separate instances) for **local issues**: logic errors, null handling, resource leaks, and style violations that matter. Each pass has full attention on one file.
+2. **Cross-file integration passes.** A separate pass looks at **data flow and contracts between files**: does the API layer's new field reach the database layer? Did a renamed function get updated at every call site? Is validation done once, in the right place?
+
+```text
+file1 -> [local pass] --+
+file2 -> [local pass] --+--> [integration pass] -> combined
+file3 -> [local pass] --+    (cross-file flow)     findings
+```
+
+The integration pass can take the local findings as input, along with interface summaries of each file (signatures, data shapes, what each function assumes), instead of every file in full. It stays focused on what only a cross-file view can see.
+
+## Verification passes with self-reported confidence
+
+The third technique adds a **verification pass**: after findings are produced, a pass re-examines each one and **self-reports a confidence** alongside it. The purpose is **calibrated routing**, not filtering:
+
+| Confidence | Route |
+|---|---|
+| High, and the finding is verified against the code | Post automatically |
+| Medium | Post, labeled for human confirmation |
+| Low | Send to a human reviewer's queue, not straight to the developer |
+
+This complements Lesson 4.1. There, confidence thresholds were a poor substitute for **explicit criteria** in deciding *what counts* as an issue. Here, the criteria already define what to report, and confidence decides **how much human attention** each reported finding needs before it reaches a developer. Confidence is used to allocate review effort, not to define the categories.
+
+<Callout type="warning" title="Anti-patterns">
+- "Review your own code carefully" in the generating session, or turning on extended thinking and calling it a review.
+- One giant prompt over every changed file.
+- Only per-file passes, with nothing checking how the files fit together.
+- Using self-reported confidence as the *definition* of what to report, instead of explicit criteria.
+</Callout>
+
+## How this shows up on the exam
+
+- **"The review misses subtle bugs in code the same session generated"** → a **second, independent instance** without the generator's reasoning context. Not self-review instructions, and not extended thinking.
+- **"A large multi-file review misses issues and contradicts itself"** → **per-file local passes** plus a separate **cross-file integration pass**.
+- **"Missed cross-file data-flow bugs"** → the missing piece is the **integration pass**.
+- **"Route findings to automatic posting vs human review"** → a **verification pass** that self-reports confidence per finding.
+
+<KeyTakeaways>
+
+- A model reviewing in the **same session** keeps its generation reasoning and is **less likely to question its own decisions**.
+- **Independent review instances** catch subtle issues better than **self-review instructions or extended thinking**.
+- Split large reviews into **per-file local passes** plus **cross-file integration passes**, to avoid attention dilution and contradictory findings.
+- **Verification passes** that self-report confidence per finding enable **calibrated routing** of findings to automation or humans.
+
+</KeyTakeaways>

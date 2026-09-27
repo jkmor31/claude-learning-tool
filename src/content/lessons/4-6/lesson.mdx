@@ -1,0 +1,123 @@
+## Structure is guaranteed; correctness has to be checked
+
+Lessons 4.4 and 4.5 got extraction to produce well-shaped, honest output. Well-shaped isn't the same as right. Line items can fail to add up, a shipping address can land in the billing field, a date can be off by a month. Task Statement 4.4 is about the machinery around extraction that catches these problems and fixes what can be fixed: **validation, retry with error feedback, and feedback loops**.
+
+## Two kinds of error, two different fixes
+
+| | Schema syntax errors | Semantic validation errors |
+|---|---|---|
+| Examples | Malformed JSON, a missing required field, the wrong type | Line items that don't sum to the total; a value in the wrong field; an end date before the start date |
+| Caught by | The schema, enforced through tool use | **Your validation code** |
+| Status with tool use | **Eliminated** | **Still possible**, so you must check |
+
+Tool use removes the first column entirely. Everything in this lesson is about the second.
+
+## Validation: checks the schema can't express
+
+Write validation as ordinary code that runs on every extraction:
+
+```python
+def validate(inv):
+    errors = []
+    items_sum = round(sum(i["amount"] for i in inv["items"]), 2)
+    if abs(items_sum - inv["total"]) > 0.01:
+        errors.append(
+            f"line items sum to {items_sum} but total "
+            f"is {inv['total']}")
+    if inv["due_date"] and inv["due_date"] < inv["invoice_date"]:
+        errors.append("due_date is before invoice_date")
+    if inv["bill_to"] == inv["ship_to"] and inv["has_ship_to"]:
+        errors.append("bill_to and ship_to are identical; "
+                      "check for a field swap")
+    return errors
+```
+
+Each error is **specific**: which fields, what values, what's wrong. That specificity matters for the next step.
+
+## Retry with error feedback
+
+When validation fails, don't just run the same request again. The guide's pattern is a **follow-up request containing three things**:
+
+1. **The original document**, so the model can look again.
+2. **The failed extraction**, so it sees what it produced.
+3. **The specific validation errors**, so it knows exactly what to fix.
+
+```text
+Your previous extraction of this invoice failed validation.
+
+Document: <the original invoice text>
+
+Your extraction: <the JSON you returned>
+
+Validation errors:
+- line items sum to 4020.00 but total is 4200.00
+
+Re-read the document and correct the extraction. If the
+document itself is inconsistent, extract what it states
+and set conflict_detected to true.
+```
+
+This works because it turns a vague "try again" into a targeted correction. Often the model misread one line item, or read the subtotal as the total, and the error message points straight at it.
+
+## When retries won't help
+
+Retries fix **format mismatches and structural or reading errors**, cases where the right answer is in the document and the model missed it. They **can't fix missing information**. If the purchase order number exists only in a separate email that wasn't provided, no number of retries will produce it. Worse, repeated retries with "the PO number is missing" pressure the model to **invent one**.
+
+| Retry will likely succeed | Retry won't help |
+|---|---|
+| A misread digit, a subtotal taken as the total | The value is only in an **external document** that wasn't provided |
+| A date in the wrong format | The source genuinely **doesn't state** the value |
+| A value placed in the wrong field | The source **contradicts itself** (flag it; don't "fix" it) |
+
+Before retrying, ask: **is the information in what I sent?** If not, return `null` (Lesson 4.5), flag the document, and route it to a person or to the process that can fetch the missing source. Cap retries (two is typical) so a hopeless case doesn't burn money.
+
+## Self-correcting fields: calculated vs stated
+
+You can build the check into the extraction itself. The guide's pattern: have the model extract **both** what the document says and what it computes:
+
+```json
+{
+  "stated_total": 4200.00,
+  "calculated_total": 4020.00,
+  "conflict_detected": true
+}
+```
+
+- `stated_total`: the total printed on the invoice.
+- `calculated_total`: the sum of the extracted line items.
+- `conflict_detected`: a boolean the model sets when the source data is inconsistent.
+
+This separates two situations that look the same from outside. If the model misread a line item, a retry fixes it and the conflict disappears. If the **invoice itself** is wrong (the vendor's arithmetic is off), the conflict persists across retries, and `conflict_detected: true` routes it to accounts payable instead of a retry loop. The source's inconsistency is recorded, not hidden.
+
+## Feedback loops: learning from dismissed findings
+
+For review systems (Lesson 4.1's code reviewers), there's a longer loop: which findings do developers **dismiss**, and why? To analyze that, you need to know what **kind** of code triggered each finding. The guide's technique: add a **`detected_pattern`** field to every structured finding:
+
+```json
+{
+  "location": "src/cache/store.ts:88",
+  "issue": "Error swallowed without rethrow",
+  "severity": "minor",
+  "detected_pattern": "catch-without-rethrow"
+}
+```
+
+Log each finding's pattern alongside whether it was accepted or dismissed. After a few weeks, you can see that `catch-without-rethrow` findings are dismissed 85% of the time in cache code, which is a clear signal to add a contrast example (Lesson 4.2) or skip rule (Lesson 4.1) for that pattern. Without the field, dismissals are a pile of individual complaints; with it, they're data you can act on.
+
+## How this shows up on the exam
+
+- **"Extraction passes the schema but values are wrong"** → semantic validation in code; tool use doesn't catch these.
+- **"How should the retry be structured?"** → include the **original document, the failed extraction, and the specific validation errors**.
+- **"Retries keep failing for one field"** → check whether the information is **absent from the provided source** (for example, in an external document). If so, stop retrying, return `null`, and escalate.
+- **"Detect inconsistent totals"** → extract `calculated_total` alongside `stated_total`, and add `conflict_detected`.
+- **"Understand why developers dismiss findings"** → a `detected_pattern` field for systematic analysis.
+
+<KeyTakeaways>
+
+- Tool use eliminates **syntax** errors. **Semantic** errors (bad sums, wrong fields) need validation code.
+- **Retry with error feedback**: send the original document, the failed extraction, and the **specific** validation errors.
+- Retries fix format and reading errors, **not missing information**. When data is absent from the source, return null and escalate instead of retrying.
+- Extract **`calculated_total` alongside `stated_total`** with a **`conflict_detected`** flag to separate misreads from inconsistent sources.
+- Add **`detected_pattern`** to findings so dismissals can be analyzed systematically.
+
+</KeyTakeaways>
