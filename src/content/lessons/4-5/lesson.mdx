@@ -1,3 +1,5 @@
+import { FabricationVsHonestNull } from "./diagrams/FabricationVsHonestNull";
+
 ## The schema shapes the answers
 
 Lesson 4.4 used a JSON schema to guarantee the **shape** of extracted data. But a schema does more than check shape. It tells the model what it's **allowed** to say. A badly designed schema can push the model toward wrong answers, and a well-designed one gives it an honest way to say "not here," "not sure," or "something else." This lesson covers the schema design considerations in Task Statement 4.3.
@@ -33,6 +35,10 @@ The fix: **make fields optional (nullable) when source documents may not contain
 ```
 
 Now `null` is a legitimate answer, and the description says when to use it. Downstream code can treat `null` as "not stated" and route the document for review, instead of trusting an invented 30.
+
+<Figure caption="A required field has no honest way to say 'not here,' so it fabricates one; a nullable field can say so.">
+  <FabricationVsHonestNull />
+</Figure>
 
 Use this judgment for each field:
 

@@ -1,3 +1,6 @@
+import { ExtractRetryLoop } from "./diagrams/ExtractRetryLoop";
+import { ConflictRetryOrEscalate } from "./diagrams/ConflictRetryOrEscalate";
+
 ## Structure is guaranteed; correctness has to be checked
 
 Lessons 4.4 and 4.5 got extraction to produce well-shaped, honest output. Well-shaped isn't the same as right. Line items can fail to add up, a shipping address can land in the billing field, a date can be off by a month. Task Statement 4.4 is about the machinery around extraction that catches these problems and fixes what can be fixed: **validation, retry with error feedback, and feedback loops**.
@@ -59,6 +62,10 @@ and set conflict_detected to true.
 
 This works because it turns a vague "try again" into a targeted correction. Often the model misread one line item, or read the subtotal as the total, and the error message points straight at it.
 
+<Figure caption="A failed validation feeds the document, the failed extraction, and the specific errors back into a targeted retry.">
+  <ExtractRetryLoop />
+</Figure>
+
 ## When retries won't help
 
 Retries fix **format mismatches and structural or reading errors**, cases where the right answer is in the document and the model missed it. They **can't fix missing information**. If the purchase order number exists only in a separate email that wasn't provided, no number of retries will produce it. Worse, repeated retries with "the PO number is missing" pressure the model to **invent one**.
@@ -88,6 +95,10 @@ You can build the check into the extraction itself. The guide's pattern: have th
 - `conflict_detected`: a boolean the model sets when the source data is inconsistent.
 
 This separates two situations that look the same from outside. If the model misread a line item, a retry fixes it and the conflict disappears. If the **invoice itself** is wrong (the vendor's arithmetic is off), the conflict persists across retries, and `conflict_detected: true` routes it to accounts payable instead of a retry loop. The source's inconsistency is recorded, not hidden.
+
+<Figure caption="The same mismatch resolves two different ways: a retry clears a misread, but a genuine conflict is escalated instead of retried again.">
+  <ConflictRetryOrEscalate />
+</Figure>
 
 ## Feedback loops: learning from dismissed findings
 
