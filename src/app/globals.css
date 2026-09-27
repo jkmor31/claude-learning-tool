@@ -47,6 +47,17 @@
   --font-mono: var(--font-geist-mono);
 }
 
+.prose details {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.prose summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
