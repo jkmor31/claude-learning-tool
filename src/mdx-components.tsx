@@ -26,7 +26,19 @@ export function KeyTakeaways({ children }: { children: ReactNode }) {
   );
 }
 
-const components: MDXComponents = { Callout, KeyTakeaways };
+// Wraps a lesson diagram (an inline SVG component) with a caption; wide diagrams scroll inside the frame on phones.
+export function Figure({ caption, children }: { caption?: string; children: ReactNode }) {
+  return (
+    <figure className="not-prose my-8">
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface p-4 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full">
+        {children}
+      </div>
+      {caption && <figcaption className="mt-2 text-center text-sm text-muted">{caption}</figcaption>}
+    </figure>
+  );
+}
+
+const components: MDXComponents = { Callout, KeyTakeaways, Figure };
 
 export function useMDXComponents(): MDXComponents {
   return components;

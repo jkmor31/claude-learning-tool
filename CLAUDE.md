@@ -21,7 +21,8 @@ Study app for the Claude Certified Architect – Foundations exam (code CCAR-F).
 - Explanations say why the correct answer is right AND why each distractor is wrong, naming the anti-pattern.
 - Don't copy the guide's sample questions verbatim; write new scenarios that test the same judgment.
 - Bonus builds accumulate in the learner's `ccarf-lab` repo (set up in lesson 0.1); each bonus adds to `exercises/<lesson-id>/`.
-- MDX: escape `{`, `}`, and `<` in prose (use inline code). Available components: `<Callout type="note|exam|warning" title?>`, `<KeyTakeaways>`.
+- MDX: escape `{`, `}`, and `<` in prose (use inline code). Available components: `<Callout type="note|exam|warning" title?>`, `<KeyTakeaways>`, `<Figure caption?>`.
+- Diagrams are hand-written inline SVG components in `src/content/lessons/<id>/diagrams/`, imported into the lesson's MDX and wrapped in `<Figure>`. Color them only with the theme CSS variables so dark mode works. No chart or diagram libraries. The `diagram-generator` agent in `.claude/agents/` follows these rules.
 
 ## Hosting
 
