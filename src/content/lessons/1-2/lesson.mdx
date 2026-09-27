@@ -1,0 +1,130 @@
+## From one agent to a team
+
+In Lesson 1.1 a single agent ran one loop with a handful of tools. That works until the task outgrows one context window. Consider the exam's **Multi-Agent Research System** scenario: search the web, analyze long documents, synthesize findings, and write a cited report. Put all of that in one agent and several problems pile up:
+
+- **Context fills with raw material.** Dozens of search results and full documents crowd out the reasoning the agent needs to do.
+- **Instructions compete.** "Search broadly," "read critically," "write concisely," and "cite everything" pull one system prompt in different directions.
+- **The tool list sprawls.** Every capability lives on one agent, and tool selection gets less reliable as the list grows (Lesson 2.3 covers this).
+- **Work is sequential.** One loop does one thing at a time.
+
+Multi-agent designs split the work among **specialized subagents**, each with a focused prompt, a small tool set, and its own context window. The price is more API calls, more latency, and more design work, so only reach for it when a single agent is actually struggling.
+
+This lesson covers the architecture the exam expects for this split, **hub-and-spoke**, and the coordinator at its center.
+
+## The hub-and-spoke shape
+
+```
+                +-----------------------+
+user <--------> |      COORDINATOR      |
+                | decompose, delegate,  |
+                | route, handle errors, |
+                | aggregate             |
+                +-----------+-----------+
+                            |
+      +--------------+------+-------+--------------+
+      |              |              |              |
++-----+----+   +-----+----+   +-----+----+   +-----+----+
+|  search  |   | analyze  |   |synthesize|   |  report  |
++----------+   +----------+   +----------+   +----------+
+```
+
+One **coordinator** sits at the hub. Each **subagent** is a spoke that talks only to the coordinator. The subagents never message each other. When the synthesis subagent needs search results, the coordinator collects them from the search subagent and passes them along.
+
+The guide defines hub-and-spoke as an architecture where the coordinator **manages all inter-subagent communication, error handling, and information routing**. Each of those three words matters on the exam.
+
+## What the coordinator owns
+
+| Responsibility | What it means in practice |
+|---|---|
+| **Task decomposition** | Turn the user's request into distinct subtasks that together cover the whole request |
+| **Delegation** | Decide which subagents to invoke (and which to skip) based on the request's complexity, and give each one what it needs |
+| **Information routing** | Decide what each subagent sees: which findings, which documents, which constraints |
+| **Error handling** | Notice when a subagent fails or comes back empty, and decide whether to retry, reroute, or continue with partial results |
+| **Result aggregation** | Combine subagent outputs into the final answer, or into the input for the next stage |
+
+The subagents are workers with narrow jobs. The coordinator is the only component that sees the whole picture. That's by design: it's the only place where a question like "do these findings actually answer what the user asked?" can be answered.
+
+<Callout type="note">
+"Deciding which subagents to invoke based on query complexity" means the coordinator shouldn't run every request through the full pipeline. A quick factual question may need one search and no report subagent at all. Lesson 1.3 goes deeper into dynamic selection.
+</Callout>
+
+## Why everything routes through the hub
+
+A natural objection is that sending results through the coordinator adds a hop. Why not let the search subagent send its results straight to synthesis? The guide gives three reasons to keep all communication flowing through the coordinator:
+
+1. **Observability.** Every handoff passes through one place, so you can log, trace, and debug the whole run from the coordinator's history. In a mesh where agents message each other, reconstructing "who told whom what" means stitching together many separate conversations.
+2. **Consistent error handling.** Failures surface in one place, and one component applies one recovery policy. When agents call each other directly, each pair invents its own error handling, and a failed search can silently turn into a report with a missing section.
+3. **Controlled information flow.** The coordinator decides exactly what each subagent receives. That keeps prompts focused, preserves source attribution, and stops one subagent's noise or mistakes from quietly spreading to the others.
+
+<Callout type="exam">
+When an answer option proposes letting subagents talk to each other directly "to reduce latency" or "to save a round trip," check what it costs. Bypassing the coordinator gives up observability, consistent error handling, and control over information flow. The exam favors keeping the hub, and reducing round trips in narrower ways. For example, Lesson 2.3 covers giving a subagent one tightly scoped tool for a frequent need.
+</Callout>
+
+## Subagents start with a blank slate
+
+The fact that causes the most multi-agent bugs: **subagents do not inherit the coordinator's conversation history.** Each subagent starts a fresh conversation. Everything it knows comes from:
+
+- its own system prompt and tool definitions, and
+- the prompt the coordinator writes when it invokes it.
+
+That's all. The subagent never saw the user's original message, earlier turns, other subagents' results, or anything the coordinator learned along the way, unless the coordinator explicitly put it in the prompt. Subagents also don't share memory between invocations: calling the same subagent twice gives you two separate conversations.
+
+Here's the bug in its most common form. The user tells the coordinator: *"I've shared three vendor contracts. Focus on data-retention clauses for EU customers."* The coordinator delegates:
+
+> "Analyze the contracts for the relevant clauses."
+
+The analysis subagent has no idea which contracts, which clauses count as "relevant," or that only EU customers matter. It will either ask for the documents or produce a generic summary of every clause. A correct delegation carries the context itself:
+
+> "Here are three vendor contracts (full text below). Extract every clause governing how long customer data is retained or when it must be deleted, and flag any that apply to EU customers. For each clause, return the contract name, section number, and quoted text."
+
+Isolation isn't a flaw to engineer around. It's what makes the pattern work: verbose exploration stays out of the coordinator's context, each subagent's reasoning isn't anchored by the others', and the coordinator's context stays focused on coordinating. The cost is that **context passing is your job.** Lesson 1.5 covers how to do it well, including structured formats that keep sources attached to findings.
+
+## Decomposition: the coordinator's biggest lever and biggest risk
+
+Everything downstream depends on how the coordinator splits the task. A subagent can only research what it was assigned. If the decomposition leaves out part of the topic, no subagent will cover it, and every subagent will still report success.
+
+That's the failure the guide calls **overly narrow task decomposition**, and it's easy to miss because nothing errors. Here's an example.
+
+A user asks: *"How is remote work changing mid-sized cities?"* The coordinator decomposes the request into:
+
+1. Office vacancy rates in mid-sized cities
+2. Commercial real estate values downtown
+3. Foot traffic in central business districts
+
+Each subagent does excellent work, and the report is well written, well cited, and coherent. It's also only about **commercial real estate.** It misses housing demand and prices, public transit ridership, municipal tax revenue, local small businesses, and migration between cities. The topic was broad, and the decomposition covered one corner of it.
+
+### Diagnosing it
+
+When a report has coverage gaps, work backward through the pipeline:
+
+| Check | If the problem is here… |
+|---|---|
+| What subtasks did the coordinator create? | Missing dimensions here mean **narrow decomposition**. The subagents never had a chance. |
+| Did each subagent cover its assigned subtask? | Weak results for an assigned subtask point to that subagent's prompt, tools, or queries. |
+| Did synthesis drop findings it received? | Findings present in inputs but absent from output point to synthesis. |
+
+The first check comes first because it's the most common cause and the easiest to overlook. When subagent outputs look fine and the final result still has gaps, blaming the subagents is the classic wrong answer.
+
+### Preventing it
+
+- **Map the scope before splitting it.** Tell the coordinator to list the major dimensions of a broad topic (stakeholders, sectors, time frames, geographies, mechanisms) and only then create subtasks, one or more per dimension.
+- **State goals and quality criteria, not a script.** "Cover the economic, social, and fiscal effects, with at least two independent sources per major claim" gives the coordinator a standard to check its own plan against. (Lesson 1.5 covers goal-based coordinator prompts.)
+- **Check coverage before finishing.** Have the coordinator compare the synthesized result against the dimensions it listed and send new subtasks for any gaps. That's the iterative refinement loop in Lesson 1.3.
+
+## How this shows up on the exam
+
+- **Root-cause questions.** "Every subagent succeeded, but the output misses X." Look at the coordinator's decomposition first.
+- **Architecture proposals.** Options that let subagents message each other directly, or skip the coordinator to save time, trade away observability, consistent error handling, and controlled information flow.
+- **Context bugs.** "The subagent ignored the user's constraints" or "the subagent asked for documents the user already provided" means the coordinator didn't pass context explicitly. Subagents don't inherit it.
+- **Scenario anchors.** The Multi-Agent Research System scenario (Scenario 3) is built on this architecture. The Customer Support and Developer Productivity scenarios use it whenever work is delegated.
+
+<KeyTakeaways>
+
+- Use multiple agents when one agent's context, instructions, or tool list is overloaded. Don't use them by default, because each extra agent adds cost and latency.
+- **Hub-and-spoke:** the coordinator manages all communication, error handling, and information routing. Subagents only talk to the coordinator.
+- The coordinator **decomposes, delegates (choosing which subagents based on complexity), routes, handles errors, and aggregates**.
+- Routing everything through the hub gives you **observability, consistent error handling, and controlled information flow**.
+- **Subagents have isolated context.** They don't inherit the coordinator's history or share memory between calls, so every prompt must carry what the subagent needs.
+- **Overly narrow decomposition** yields confident, well-written, incomplete results. When subagents all succeed but coverage is missing, check the coordinator's subtasks first.
+
+</KeyTakeaways>
