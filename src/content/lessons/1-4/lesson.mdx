@@ -1,0 +1,157 @@
+## From architecture to configuration
+
+Lessons 1.2 and 1.3 covered what a coordinator should do. This lesson covers how to set one up in the **Claude Agent SDK**: the tool a coordinator uses to spawn subagents, the setting that allows it, and the `AgentDefinition` that describes each subagent. These are concrete configuration facts, and the exam tests them directly.
+
+## First, a naming note: Task vs Agent
+
+The exam guide calls the subagent-spawning tool the **Task tool** and says a coordinator's `allowedTools` must include **`"Task"`**. In current Agent SDK releases the same tool is named **`Agent`**. It was called `Task` before Claude Code v2.1.63, and it still appears as `"Task"` in the SDK's startup tool list.
+
+<Callout type="exam">
+Answer exam questions with the guide's terminology: the **Task tool**, and **`allowedTools` must include `"Task"`**. When you write real code, check your SDK version. The current docs use `"Agent"` in `allowedTools`, and to detect subagent calls reliably across versions, match both names. The code in this lesson uses `Agent` and notes where the exam says `Task`.
+</Callout>
+
+## How spawning works
+
+A subagent is spawned through an ordinary tool call, the same mechanism as any tool from Lesson 1.1:
+
+1. The coordinator's response includes a `tool_use` block for the Task tool. Its input names **which subagent** to use (`subagent_type`) and gives the **delegation prompt**, the specific job and its context.
+2. The SDK starts that subagent as a **separate agent** with its own conversation, and runs its own agentic loop until it finishes.
+3. The subagent's **final message** comes back to the coordinator as the tool result. Its intermediate tool calls and the files it read stay inside the subagent.
+
+From the coordinator's point of view, delegating is just calling a tool and getting a result. That's why the loop rules from Lesson 1.1 still apply, and why spawning subagents in parallel works the same way as parallel tool calls (Lesson 1.5).
+
+## allowedTools must include the Task tool
+
+A coordinator can only spawn subagents if it can use the Task tool. In the Agent SDK, `allowedTools` lists the tools the agent may use without stopping to ask for permission. In an unattended pipeline, a tool that isn't listed effectively can't run.
+
+So the rule the exam states is simple: **if the coordinator is supposed to delegate, `allowedTools` must include `"Task"`** (`"Agent"` in current SDK versions). Leave it out and you'll see a coordinator that has subagents defined but can't use them. It either does the work itself or fails.
+
+List the tools your subagents use too, such as `WebSearch` or `Read`, so they can run unattended.
+
+## AgentDefinition: describing each subagent
+
+Each subagent type is defined with an `AgentDefinition`. The guide highlights three parts, **descriptions, system prompts, and tool restrictions**, and the SDK adds an optional model override:
+
+| Field | Required | What it does |
+|---|---|---|
+| `description` | Yes | Natural-language description of **when to use** this subagent. The coordinator reads it to decide which subagent to invoke. |
+| `prompt` | Yes | The subagent's **system prompt**: its role, expertise, standards, and output format. |
+| `tools` | No | The tools this subagent may use. **If omitted, it inherits every tool available to subagents.** |
+| `model` | No | A model override for this subagent, such as a faster model for simple, high-volume work. |
+
+The SDK supports more fields, such as `disallowedTools`, `maxTurns`, and `mcpServers`, but these four are the core.
+
+```python
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions, AgentDefinition
+
+options = ClaudeAgentOptions(
+    # "Agent" spawns subagents ("Task" in older SDKs and the exam guide)
+    allowed_tools=["Agent", "WebSearch", "WebFetch", "Read"],
+    agents={
+        "web-researcher": AgentDefinition(
+            description=(
+                "Finds and evaluates web sources on ONE assigned "
+                "subtopic. Use for any question that needs current "
+                "external evidence. Does not write reports."
+            ),
+            prompt=(
+                "You research exactly the subtopic you are given. "
+                "Return findings as records: claim, supporting "
+                "excerpt, source URL, publication date."
+            ),
+            tools=["WebSearch", "WebFetch"],
+        ),
+        "synthesizer": AgentDefinition(
+            description=(
+                "Combines research findings passed to it into a "
+                "cited summary. Use only after research findings "
+                "exist. It cannot search."
+            ),
+            prompt=(
+                "You write concise, cited syntheses using only the "
+                "findings provided. Every claim must cite a source "
+                "from those findings."
+            ),
+            tools=["Read"],
+            model="sonnet",
+        ),
+    },
+)
+
+QUESTION = "How are European cities adapting transit to extreme heat?"
+
+async def main():
+    async for message in query(prompt=QUESTION, options=options):
+        if hasattr(message, "result"):
+            print(message.result)
+
+asyncio.run(main())
+```
+
+### description is a routing signal
+
+The coordinator picks a subagent the same way a model picks a tool: by reading descriptions. Vague or overlapping descriptions ("Helps with research," "Helps with analysis") cause misrouting. Good descriptions say **what the subagent does, when to use it, and when not to**. Notice that the synthesizer's description says it can't search, which steers the coordinator away from sending it research tasks. Lesson 2.1 covers the same principle for tool descriptions.
+
+### prompt is the role, not the task
+
+There are two prompts, and it's easy to confuse them:
+
+- **`AgentDefinition.prompt`** is the subagent's **system prompt**. It's stable across every invocation: who the subagent is, its standards, and its output format.
+- **The Task tool's prompt** is the **delegation**. It changes with every call: the specific assignment plus all the context the subagent needs.
+
+Put the durable role in the definition and the job-specific details in the delegation. A synthesizer's definition says "cite every claim." The delegation contains *these particular findings* and *this audience*.
+
+### tools enforces least privilege
+
+`tools` is a hard restriction. A tool that isn't listed doesn't exist in that subagent's session. It can't call it, and there's no permission prompt to click through. That makes `tools` the right way to keep a synthesis agent from wandering off to run its own web searches, or a read-only reviewer from editing files.
+
+<Callout type="warning" title="Omitting tools grants everything">
+Leaving `tools` out doesn't mean "no tools." It means the subagent **inherits every tool available to subagents**. A synthesizer defined without a `tools` field can search the web, edit files, and run shell commands. If you see a subagent using tools outside its role, check its `tools` field first.
+</Callout>
+
+## What a subagent receives and what it doesn't
+
+This makes Lesson 1.2's "blank slate" concrete:
+
+| The subagent receives | The subagent does not receive |
+|---|---|
+| Its own system prompt (`AgentDefinition.prompt`) | The coordinator's conversation history |
+| The Task tool's delegation prompt | The coordinator's tool results |
+| Tool definitions: its `tools` list, or all tools if omitted | The coordinator's system prompt |
+| Project CLAUDE.md, when settings sources are loaded | Anything from its own previous invocations* |
+
+\*Unless you explicitly resume that subagent's session. By default, each invocation starts fresh.
+
+The only way to get task-specific information to a subagent is the **delegation prompt**. Lesson 1.5 covers how to write it.
+
+## Programmatic vs file-based definitions
+
+Besides the `agents` option in code, you can define subagents as Markdown files in `.claude/agents/`, with frontmatter for the description and tools and the body as the system prompt. Claude Code uses the same format. In SDK applications, programmatic definitions are the recommended approach, and they take precedence over a file-based agent with the same name.
+
+## Watching delegation happen
+
+To confirm the coordinator actually delegated, watch the message stream:
+
+- A `tool_use` block whose `name` is `"Agent"`, or `"Task"` on older versions (match both), marks a spawn. Its input shows the `subagent_type` and the delegation prompt.
+- Messages produced inside a subagent carry a **`parent_tool_use_id`** linking them back to the Task call that started them.
+
+Logging both gives you the observability Lesson 1.2 promised: which subagent ran, with what prompt, and what it returned.
+
+## How this shows up on the exam
+
+- **"The coordinator never delegates" or "subagent calls never execute"** → check that `allowedTools` includes `"Task"`.
+- **"A subagent uses tools outside its role"** → its `tools` field is too broad or missing (missing means it inherits everything).
+- **"The coordinator picks the wrong subagent"** → the descriptions are vague or overlapping. Make them say what, when, and when not.
+- **"The subagent ignored context from the conversation"** → subagents only see their system prompt and the delegation prompt. Pass the context explicitly.
+
+<KeyTakeaways>
+
+- Subagents are spawned through the **Task tool**. The exam uses "Task"; current SDKs name it `Agent`.
+- **`allowedTools` must include `"Task"`** for a coordinator to spawn subagents.
+- `AgentDefinition`: **`description`** (when to use it, and the coordinator routes on this), **`prompt`** (system prompt/role), **`tools`** (hard restriction), and optional **`model`**.
+- **Omitting `tools` means the subagent inherits all tools.** Always list them explicitly.
+- Definition prompt = stable role. Delegation prompt = this job plus its context.
+- The coordinator gets back only the subagent's **final message**. Detect spawns via `tool_use` blocks named Agent/Task and `parent_tool_use_id`.
+
+</KeyTakeaways>
