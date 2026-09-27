@@ -1,0 +1,142 @@
+## When "usually" isn't good enough
+
+Everything in Lessons 1.1–1.5 relied on the model's judgment: which tool to call, which subagent to spawn, when the work is done. That's the right default. But some rules can't be left to judgment:
+
+- A refund must never be issued before the customer's identity is verified.
+- Refunds over a set amount must go to a human.
+- Account details must not change until the account holder is confirmed.
+
+This lesson covers Task Statement 1.4: how to **enforce** that kind of rule, how to **hand off** cleanly to a human when the agent can't finish, and how to handle a customer who raises several problems in one message.
+
+## Prompt guidance vs programmatic enforcement
+
+There are two ways to control workflow order:
+
+| | Prompt-based guidance | Programmatic enforcement |
+|---|---|---|
+| How | System prompt instructions, few-shot examples | Hooks, prerequisite gates, checks in the tool code |
+| Guarantee | Probabilistic: usually followed | Deterministic: the blocked action can't happen |
+| Failure mode | Occasionally skipped, especially on unusual inputs | Only fails if the code is wrong |
+| Best for | Tone, style, judgment calls, soft preferences | Identity, money, compliance, safety, irreversible actions |
+
+The guide makes the key point explicitly: **when deterministic compliance is required, prompt instructions alone have a non-zero failure rate.** Writing "ALWAYS" in capital letters, repeating the instruction, or adding few-shot examples can raise compliance from 97% to 99.5%, but it can't reach 100%. For a refund pipeline handling 10,000 requests a day, 0.5% is 50 refunds a day to unverified accounts.
+
+<Callout type="exam">
+When a question says the rule **must** hold, especially with financial, identity, or compliance consequences, the answer is programmatic enforcement. Distractors add emphasis to the prompt, add few-shot examples, add a routing classifier, or audit afterward. Each of those either stays probabilistic or finds the problem after the damage is done.
+</Callout>
+
+## Prerequisite gates
+
+A **prerequisite gate** blocks a downstream tool call until an earlier step has succeeded. The guide's example: **block `process_refund` until `get_customer` has returned a verified customer ID.**
+
+In the Agent SDK, the natural place for a gate is a **`PreToolUse` hook**. It runs your code before every matching tool call and can deny the call:
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
+
+# Your get_customer tool implementation adds an ID here once
+# it has confirmed the customer's identity.
+verified_customers: set[str] = set()
+
+async def require_verified_customer(input_data, tool_use_id, context):
+    customer_id = input_data["tool_input"].get("customer_id")
+    if customer_id in verified_customers:
+        return {}  # allow the call
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": input_data["hook_event_name"],
+            "permissionDecision": "deny",
+            "permissionDecisionReason": (
+                "Blocked: verify this customer with get_customer "
+                "before looking up orders or issuing refunds."
+            ),
+        }
+    }
+
+options = ClaudeAgentOptions(
+    hooks={
+        "PreToolUse": [
+            HookMatcher(
+                # MCP tools are named mcp__<server>__<tool>
+                matcher=(
+                    "mcp__support__lookup_order"
+                    "|mcp__support__process_refund"
+                ),
+                hooks=[require_verified_customer],
+            )
+        ]
+    },
+)
+```
+
+Three things to notice:
+
+1. **The gate checks state, not intent.** It doesn't ask whether the model *meant* to verify first. It checks whether verification actually happened, by looking for an ID the verification step recorded. That's what makes it deterministic.
+2. **The deny reason goes back to the model.** A blocked agent doesn't just fail: it reads "verify this customer with get_customer first," takes that step, and retries. The gate enforces the rule and also tells the model how to comply.
+3. **Keep the prompt guidance too.** The system prompt and tool descriptions should still explain the verification requirement, so the model usually gets the order right the first time. The gate catches the cases where it doesn't. Guidance keeps things efficient, and the gate keeps them safe.
+
+You can also put the check **inside the tool itself**, so `process_refund` refuses unverified customers in the backend. That's programmatic too, and for money-moving operations, doing both is reasonable defense in depth. Lesson 1.7 covers hooks in depth, including hooks that redirect blocked actions such as over-limit refunds to human escalation.
+
+## Structured handoffs to humans
+
+Some cases need a person: a policy exception, a refund over the auto-approval limit, a customer who asks for a human. The guide points out that the human agent **doesn't have access to the conversation transcript**. Whatever the agent passes along is everything they know.
+
+Compare two handoffs:
+
+> Escalating: customer upset about a refund.
+
+versus a **structured handoff summary**:
+
+```json
+{
+  "customer_id": "C-20931",
+  "identity_verified": true,
+  "issue": "Refund for order 4417: item arrived damaged",
+  "root_cause": "Carrier damage; customer photo confirms a cracked housing",
+  "amount": 612.00,
+  "why_escalated": "Exceeds the $500 auto-refund limit",
+  "actions_taken": [
+    "Verified identity (email + ZIP)",
+    "Confirmed order is within the 30-day return window",
+    "Reviewed damage photo"
+  ],
+  "recommended_action": "Approve full $612.00 refund to original payment method",
+  "customer_expectation": "Wants a refund, not a replacement, today"
+}
+```
+
+With the first, the human has to start over: re-verify, re-ask, and re-investigate, while the customer repeats everything. With the second, they can act within seconds. The guide lists the essentials: **customer ID, root cause, refund amount, recommended action.** It's also worth including what was already tried and what the customer expects, so the human doesn't repeat work or promise the wrong outcome.
+
+Make the handoff a **tool with a required schema**, for example `escalate_to_human` with the fields above, rather than free text. Then the structure is guaranteed and missing fields are caught before the handoff reaches a person (Module 4 covers schema design).
+
+## Multi-concern requests
+
+Customers often bundle problems:
+
+> "Order 4417 arrived broken, I was charged twice for order 5102, and I need to update my shipping address."
+
+A common failure: the agent fixes the first issue, writes a friendly wrap-up, and the other two quietly disappear. The guide's pattern:
+
+1. **Decompose** the message into distinct items: damaged item (4417), duplicate charge (5102), address change.
+2. **Establish shared context once:** verify the customer a single time, and use that verified ID for every item instead of re-verifying per issue.
+3. **Investigate each item in parallel**, with multiple tool calls in one response or parallel subagents for heavier work (Lesson 1.5).
+4. **Synthesize one unified resolution** that addresses every item, including any that need escalation. For example: "The replacement for 4417 ships tomorrow, the duplicate charge on 5102 has been refunded, your address is updated."
+
+Decomposing up front means nothing gets forgotten. Shared context means the customer isn't asked to verify three times. Parallel investigation keeps the response fast. And a single synthesized reply lets the customer see that everything was handled.
+
+## How this shows up on the exam
+
+- **"The agent occasionally skips a required step"** combined with financial, identity, or compliance stakes → a programmatic prerequisite gate. Prompt emphasis, few-shot examples, and after-the-fact audits are distractors.
+- **"Human agents have to re-ask customers everything"** → a structured handoff with customer ID, root cause, amount, actions taken, and recommended action.
+- **"Multi-issue messages get only partly resolved"** → decompose into items, investigate each in parallel with shared context, and send one unified resolution.
+- **Style and tone rules** ("be empathetic," "keep replies brief") → prompt guidance is fine. Not every rule needs a hook.
+
+<KeyTakeaways>
+
+- Prompt instructions are **probabilistic** and have a non-zero failure rate. Must-hold rules need **programmatic enforcement**.
+- A **prerequisite gate** blocks a downstream tool until an earlier step has succeeded, and checks recorded **state**, not intent. In the Agent SDK, use a `PreToolUse` hook that returns `permissionDecision: "deny"`.
+- Denials include a **reason** that tells the model how to comply. Keep prompt guidance as well, for efficiency.
+- **Structured handoffs:** the human has no transcript, so pass customer ID, root cause, amount, actions taken, and a recommended action, ideally through a schema-enforced tool.
+- **Multi-concern requests:** decompose, share context once, investigate in parallel, and send one unified resolution.
+
+</KeyTakeaways>
