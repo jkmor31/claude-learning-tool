@@ -1,3 +1,5 @@
+import { CommandExpansion } from "./diagrams/CommandExpansion";
+
 ## Turning a prompt you keep retyping into a command
 
 Some prompts get typed over and over: "review this diff against our checklist," "write a migration for this model change," "draft release notes since the last tag." A **custom slash command** saves that prompt as a Markdown file, and typing `/review` runs it. That's the first half of Task Statement 3.2.
@@ -72,6 +74,10 @@ and write user-facing release notes for the first two.
 ```
 
 The `allowed-tools` field names the tools this command can use without stopping to ask permission, here just two `git` commands. Lesson 3.4 looks at that field more closely, including what it does and doesn't guarantee.
+
+<Figure caption="Both $ARGUMENTS and a backtick shell command are filled in before Claude ever reads the prompt.">
+  <CommandExpansion />
+</Figure>
 
 ## Designing good team commands
 

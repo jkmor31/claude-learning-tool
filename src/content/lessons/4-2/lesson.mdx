@@ -1,3 +1,6 @@
+import { AmbiguousToolChoice } from "./diagrams/AmbiguousToolChoice";
+import { SwallowedErrorContrast } from "./diagrams/SwallowedErrorContrast";
+
 ## When instructions aren't enough
 
 Lesson 4.1 showed that explicit criteria beat vague ones. But some things are hard to pin down in words, however carefully you write them: the exact shape of a useful finding, or where the line falls between two reasonable choices. You can add paragraph after paragraph and still get inconsistent results.
@@ -55,6 +58,10 @@ if the customer has a package to ask about.
 
 The reasoning is the important part. Without it, the model learns to match surface features: "check on" goes to status. With it, the model learns **the principle**: general questions go to the broader tool, and location questions go to tracking.
 
+<Figure caption="Naming the rejected tool and why it lost teaches the underlying judgment, not a lookup of phrasings.">
+  <AmbiguousToolChoice />
+</Figure>
+
 ## Generalization, not a lookup table
 
 That's the property the guide stresses: **few-shot examples let the model generalize judgment to novel patterns rather than matching only pre-specified cases.** You can't write a rule for every request phrasing or every code pattern. A few examples with good reasoning teach the underlying distinction, and the model applies it to inputs that look nothing like the examples.
@@ -76,6 +83,10 @@ silently becomes a free order.
 ```
 
 The two snippets look alike on the surface (a caught error that isn't re-thrown), but the examples show that **context** decides whether it's a problem. That teaches a transferable judgment instead of a blanket rule like "flag every swallowed error," which would flood reviews with false positives.
+
+<Figure caption="Two catch blocks with the same shape land on opposite verdicts once the surrounding context is shown.">
+  <SwallowedErrorContrast />
+</Figure>
 
 ## Designing good examples
 

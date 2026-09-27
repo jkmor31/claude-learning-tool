@@ -1,3 +1,5 @@
+import { SelectiveImports } from "./diagrams/SelectiveImports";
+
 ## When one CLAUDE.md gets too big
 
 A project's `CLAUDE.md` starts small: a build command, a test command, a few conventions. A year later it's 900 lines covering API design, testing, deployment, database migrations, the frontend style guide, and three abandoned experiments. Everyone edits it, nobody reads it end to end, and some of it contradicts the rest.
@@ -45,6 +47,10 @@ packages/db/CLAUDE.md        -> sql-migrations
 ```
 
 Each standard is written **once** and maintained in one place. Each package's `CLAUDE.md` is short, and its imports reflect what the people who own that package know matters there. The payments team knows PCI logging rules apply to them; the web team knows they don't. Claude working in `packages/web/` gets the React and accessibility standards and isn't distracted by money-handling rules.
+
+<Figure caption="Each package's CLAUDE.md imports only the standards its own team knows apply.">
+  <SelectiveImports />
+</Figure>
 
 Compare the alternatives:
 

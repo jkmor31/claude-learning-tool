@@ -1,3 +1,6 @@
+import { InformalValueNormalization } from "./diagrams/InformalValueNormalization";
+import { AbsentVsHardToFind } from "./diagrams/AbsentVsHardToFind";
+
 ## Extraction meets messy documents
 
 Extraction means pulling structured fields out of unstructured documents: invoices, research papers, contracts, clinical notes. It works well on clean, consistent documents. Real collections aren't clean. The same fact shows up in different places, in different formats, sometimes informally, sometimes not at all.
@@ -53,6 +56,10 @@ Few-shot examples set the rules for these cases:
 
 The examples show that a range stays a range, an informal amount stays informal (with `null` for the missing number rather than an invented one), and a package size is kept rather than converted. That's the guide's point: **few-shot examples reduce hallucination in extraction**, especially with informal measurements and varied structures.
 
+<Figure caption="Examples keep a range as a range and an informal amount as null, instead of inventing false precision.">
+  <InformalValueNormalization />
+</Figure>
+
 ## Required fields that come back empty
 
 A specific symptom the guide calls out: **required fields coming back empty or null** even though the information is in the document. Usually the field appears in a format the model didn't recognize: a date written "the third of May," an invoice total labeled "Amount due" instead of "Total," an author list in a footer.
@@ -62,6 +69,10 @@ The fix is examples showing **correct extraction from documents with those varie
 <Callout type="exam" title="Absent vs hard to find">
 Few-shot examples help when the information **is in the document** but in an unexpected place or format. They don't help when it's **genuinely absent**. That's a schema problem: make the field nullable so the model isn't pushed to invent a value (Lesson 4.5), and don't expect retries to conjure it (Lesson 4.6). Exam questions often hinge on which of these two situations you're in.
 </Callout>
+
+<Figure caption="The fix depends on why the field is empty: hard to find calls for examples, genuinely absent calls for a nullable schema.">
+  <AbsentVsHardToFind />
+</Figure>
 
 ## Designing extraction examples
 

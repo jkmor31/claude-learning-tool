@@ -1,3 +1,5 @@
+import { ForkedSkill } from "./diagrams/ForkedSkill";
+
 ## Skills: packaged workflows that load when needed
 
 A **skill** is a folder in `.claude/skills/` containing a `SKILL.md` file: instructions for a specific task, plus frontmatter that controls how the skill runs. Like a command, you can invoke it by name (`/analyze-deps`). Unlike `CLAUDE.md`, it **isn't loaded every session**. It loads when it's invoked. That makes skills the home for task-specific workflows that would otherwise bloat your always-loaded configuration.
@@ -44,6 +46,10 @@ The guide names two kinds of work that benefit:
 
 - **Verbose output**, such as a codebase analysis or an audit across many files.
 - **Exploratory context**, such as brainstorming several alternative designs. You want the chosen direction in your session, not every discarded idea.
+
+<Figure caption="A forked skill does its noisy work in an isolated subagent context and returns only the result.">
+  <ForkedSkill />
+</Figure>
 
 Don't fork a skill whose whole point is to change your current conversation's state, like one that loads coding guidelines for the work you're about to do. A forked skill starts without your conversation history, so write its instructions as a self-contained task.
 
