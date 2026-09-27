@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BonusScenario } from "@/components/BonusScenario";
+import { LessonStatus } from "@/components/LessonStatus";
 import { Quiz } from "@/components/Quiz";
 import { allLessons, getLesson } from "@/content/curriculum";
 import { lessonLoaders } from "@/content/loaders";
@@ -34,6 +35,7 @@ export default async function LessonPage({ params }: PageProps<"/lessons/[id]">)
       <h1 className="mt-2 text-3xl font-semibold leading-tight">
         <span className="text-muted">{id.replace("-", ".")}</span> {lesson.title}
       </h1>
+      {content && <LessonStatus lessonId={id} questionCount={content.quiz.length} />}
 
       {content ? (
         <>

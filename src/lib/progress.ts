@@ -9,55 +9,65 @@ export interface LessonProgress {
 
 export type ProgressMap = Record<string, LessonProgress>;
 
-const STORAGE_KEY = "ccarf-progress-v1";
-const EMPTY: ProgressMap = {};
-const listeners = new Set<() => void>();
-let cache: ProgressMap | null = null;
+// A tiny localStorage-backed store shared by every component that reads it, and kept in sync across tabs.
+function createStore<T>(key: string, empty: T) {
+  const listeners = new Set<() => void>();
+  let cache: T | null = null;
 
-function read(): ProgressMap {
-  if (cache) return cache;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    cache = raw ? (JSON.parse(raw) as ProgressMap) : {};
-  } catch {
-    cache = {};
-  }
-  return cache;
-}
-
-function write(next: ProgressMap) {
-  cache = next;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    // Storage unavailable (private mode, blocked site data): keep progress in memory for this visit.
-  }
-  listeners.forEach((l) => l());
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY) {
-      cache = null;
-      listener();
+  function read(): T {
+    if (cache !== null) return cache;
+    try {
+      const raw = window.localStorage.getItem(key);
+      cache = raw ? (JSON.parse(raw) as T) : empty;
+    } catch {
+      cache = empty;
     }
-  };
-  window.addEventListener("storage", onStorage);
-  return () => {
-    listeners.delete(listener);
-    window.removeEventListener("storage", onStorage);
-  };
+    return cache;
+  }
+
+  function write(next: T) {
+    cache = next;
+    try {
+      window.localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      // Storage unavailable (private mode, blocked site data): keep the value in memory for this visit.
+    }
+    listeners.forEach((l) => l());
+  }
+
+  function subscribe(listener: () => void) {
+    listeners.add(listener);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === key) {
+        cache = null;
+        listener();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      listeners.delete(listener);
+      window.removeEventListener("storage", onStorage);
+    };
+  }
+
+  function useValue(): T {
+    return useSyncExternalStore(subscribe, read, () => empty);
+  }
+
+  return { read, write, useValue };
 }
 
-export function useProgress(): ProgressMap {
-  return useSyncExternalStore(subscribe, read, () => EMPTY);
-}
+const EMPTY: ProgressMap = {};
+const progressStore = createStore<ProgressMap>("ccarf-progress-v1", EMPTY);
+const lastLessonStore = createStore<string | null>("ccarf-last-lesson-v1", null);
+
+export const useProgress = progressStore.useValue;
+export const useLastLesson = lastLessonStore.useValue;
 
 export function recordQuizResult(lessonId: string, score: number, passed: boolean) {
-  const current = read();
+  const current = progressStore.read();
   const prev = current[lessonId];
-  write({
+  progressStore.write({
     ...current,
     [lessonId]: {
       passed: passed || (prev?.passed ?? false),
@@ -66,6 +76,11 @@ export function recordQuizResult(lessonId: string, score: number, passed: boolea
   });
 }
 
+export function recordVisit(lessonId: string) {
+  if (lastLessonStore.read() !== lessonId) lastLessonStore.write(lessonId);
+}
+
 export function resetProgress() {
-  write({});
+  progressStore.write({});
+  lastLessonStore.write(null);
 }
