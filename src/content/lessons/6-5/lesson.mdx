@@ -1,3 +1,5 @@
+import { LedgerlinePipeline } from "./diagrams/LedgerlinePipeline";
+
 ## The system
 
 You're integrating **Claude Code into a CI/CD pipeline**. It runs automated code reviews, generates test cases and posts feedback on pull requests. The requirement that shapes everything: feedback must be **actionable**, with **few false positives**, because developers stop reading a reviewer that cries wolf.
@@ -8,22 +10,9 @@ The primary domains are **Claude Code Configuration & Workflows** (Domain 3) and
 
 Picture a fictional payments company, Ledgerline, running three jobs:
 
-```text
-pull_request opened / updated
-  |
-  +-- review job (blocking, synchronous API)                     3.8
-  |     claude -p ... --output-format json --json-schema ...
-  |     read-only tools; CLAUDE.md supplies review criteria      3.9, 4.1
-  |     per-file passes + one integration pass                   4.8
-  |     prior findings in context: report only new/unaddressed   3.9
-  |     -> inline PR comments from structured_output
-  |
-  +-- test job (non-blocking)                                    3.9
-        existing tests + fixtures in context; no duplicates
-
-nightly
-  +-- tech-debt audit (Message Batches API, custom_id per file)  4.7
-```
+<Figure caption="Anything a developer waits on runs synchronously; the nightly audit, which nobody waits on, goes through batches.">
+  <LedgerlinePipeline />
+</Figure>
 
 ### Running unattended
 

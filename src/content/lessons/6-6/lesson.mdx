@@ -1,3 +1,5 @@
+import { HarborlinePipeline } from "./diagrams/HarborlinePipeline";
+
 ## The system
 
 You're building a **structured data extraction system** with Claude. It pulls information out of unstructured documents, **validates the output against JSON schemas**, keeps accuracy high, **handles edge cases gracefully** and feeds **downstream systems** that expect clean data.
@@ -8,25 +10,9 @@ The primary domains are **Prompt Engineering & Structured Output** (Domain 4) an
 
 Picture the accounts-payable team at a fictional distributor, Harborline Supply. Every night, about 8,000 supplier invoices arrive in dozens of layouts, and a few urgent ones arrive during the day. The ERP system downstream accepts only valid, complete records.
 
-```text
-documents
-  |  urgent: synchronous call        nightly: Message Batches     4.7
-  |                                  (custom_id = document id)
-  v
-extraction call                                                   4.4
-  tool: extract_invoice (strict JSON schema)                       4.5
-  prompt: field definitions, normalization rules,
-          2-4 examples of different layouts                       4.3
-  |
-  v
-validator (your code): schema + semantic checks                   4.6
-  |-- fixable error  -> retry with document, output, exact errors
-  |-- info absent    -> no retry; null stays null
-  v
-router: calibrated field confidence, conflict flags               5.6
-  |-- low confidence or conflict -> human review queue
-  |-- high confidence -> ERP, plus a stratified QA sample
-```
+<Figure caption="Retries go only to errors the document can fix; everything else reaches the router, which decides what a person must check.">
+  <HarborlinePipeline />
+</Figure>
 
 ### A schema that allows honest answers
 
