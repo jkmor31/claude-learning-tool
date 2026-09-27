@@ -1,0 +1,135 @@
+## The delegation prompt is the subagent's whole world
+
+Lesson 1.4 showed that a subagent receives exactly two things written for the job at hand: its own system prompt and the coordinator's **delegation prompt**. Everything specific to this task, including the user's goal, earlier findings, constraints, and sources, reaches the subagent only if the coordinator writes it into that prompt.
+
+This lesson covers the rest of Task Statement 1.3, which is about writing delegations well:
+
+1. Pass **complete findings** from earlier agents, not pointers or thin summaries.
+2. Use **structured formats** that keep content separate from its source metadata.
+3. Spawn independent subagents **in parallel**, in a single coordinator response.
+4. Write coordinator prompts around **goals and quality criteria**, not step-by-step procedures.
+
+It ends with **fork-based sessions**, the one case where an agent does start from existing context.
+
+## Pass complete findings, not pointers
+
+The synthesis subagent is where this goes wrong most often. By the time the coordinator invokes it, search and analysis subagents have produced findings. The synthesizer's output can only be as good as what the coordinator passes along.
+
+Three common mistakes:
+
+- **Pointers:** "Synthesize the findings from the research phase." The synthesizer never saw the research phase.
+- **Thin summaries:** "Research found that heat adaptation is growing, with shelters and tree planting." The numbers, dates, qualifiers, and sources are gone, so the synthesizer can't cite anything or be precise.
+- **Partial handoffs:** passing the search results but forgetting the document-analysis output, or the reverse.
+
+The guide's skill statement is direct: **include complete findings from prior agents directly in the subagent's prompt**. For example, pass both the web search results and the document analysis outputs to the synthesis subagent.
+
+"Complete" doesn't mean "everything verbatim, including the reasoning." When downstream context is tight, upstream agents should return **structured key facts** instead of long narratives about how they found them (Lesson 5.2 covers this). The goal is that nothing the next agent needs gets lost in transit.
+
+## Keep content separate from metadata
+
+Attribution disappears at handoffs. A search subagent writes, "According to a 2024 city report, Riverton opened 40 cooling centers." The coordinator paraphrases that into a summary for the synthesizer, and by the final report, "40 cooling centers" has no source, no date, and no URL. Each handoff dropped a little more.
+
+The fix is to pass findings as **structured records** that keep the claim and its provenance in separate fields:
+
+```json
+{
+  "findings": [
+    {
+      "id": "F7",
+      "subtopic": "public cooling",
+      "claim": "Riverton opened 40 cooling centers in summer 2024.",
+      "excerpt": "...expanded the network to 40 cooling centers...",
+      "source": {
+        "title": "Riverton Heat Response Annual Report",
+        "url": "https://example.org/riverton-heat-2024",
+        "published": "2025-01-15",
+        "page": 12
+      }
+    }
+  ]
+}
+```
+
+*(Riverton is a made-up example.)*
+
+What this structure gives you:
+
+- **Attribution survives.** The synthesizer can cite `F7`, and the coordinator can map `F7` back to its title, URL, and page in the final report, even if the synthesizer rewords the claim.
+- **The coordinator can check the evidence:** remove duplicate sources by URL, notice claims that lack an excerpt, and spot two findings that disagree.
+- **Dates travel with claims.** A 2019 figure and a 2025 figure aren't necessarily a contradiction. Lesson 5.7 covers handling conflicting and time-sensitive findings.
+
+Require this format in the upstream subagents' system prompts (their `AgentDefinition.prompt`), then pass the records **intact** to the next stage. Don't flatten them into prose.
+
+## Spawn independent subagents in parallel
+
+In Lesson 1.1, a single response could contain several `tool_use` blocks. The Task tool is a tool, so the same applies: a coordinator can spawn several subagents **in one response** by emitting multiple Task calls at once.
+
+The guide contrasts this with spawning them **across separate turns**, one Task call per response. The difference shows up in wall-clock time:
+
+| Approach | Four independent research subtasks, about 60 s each |
+|---|---|
+| One Task call per coordinator turn | ≈ 4 minutes, plus a coordinator turn between each |
+| Four Task calls in one coordinator response | ≈ 1 minute: the time of the slowest subagent |
+
+Sequential spawning adds up the durations. Parallel spawning takes about as long as the slowest one.
+
+When to parallelize:
+
+- **Parallelize independent work:** different subtopics, source types, files, or customer issues that don't need each other's results.
+- **Keep dependent work in order:** synthesis needs the research results, so it runs after the research finishes, not alongside it.
+
+If your coordinator spawns one subagent per turn when the subtasks are clearly independent, say so in its prompt: *"When subtasks don't depend on each other, launch all of them in the same response."* The results come back together, and the coordinator reasons over all of them at once.
+
+## Give goals and quality criteria, not procedures
+
+The last skill in Task 1.3 is about the **coordinator's** prompt, and by extension the delegations it writes. Compare:
+
+**Procedural:**
+
+> 1. Search "Riverton cooling centers 2024".
+> 2. Search "Riverton tree canopy program".
+> 3. Read the top 3 results for each.
+> 4. Write one paragraph per search.
+
+**Goal-based:**
+
+> Goal: explain how Riverton is adapting to extreme heat, for a city council briefing. Quality bar: cover public health, urban greening, and infrastructure; support each with at least two sources from the last five years; flag any area where evidence is thin.
+
+The procedural version breaks as soon as reality doesn't match the script. If the first search returns nothing useful, the agent has no way to adapt. It can't pursue a better lead it finds along the way, and it doesn't know what "done" looks like. The goal-based version tells the agent **what success is** and **how it will be judged**, and leaves the path to the agent. That's what the guide means by designing coordinator prompts that "specify research goals and quality criteria rather than step-by-step procedural instructions, to enable subagent adaptability."
+
+Goal-based isn't the same as vague. "Research heat adaptation" is vague. The goal-based example above is specific about audience, scope, evidence standards, and what to flag. It just doesn't script the searches.
+
+<Callout type="note">
+Procedures still belong where order is a hard requirement, for example "verify identity before issuing a refund." But those requirements should be enforced in code, not written as prompt steps. That's Lesson 1.6.
+</Callout>
+
+## Fork-based sessions: starting from shared context
+
+Everything so far assumes the subagent starts fresh. The guide also lists **fork-based session management** as a way to explore divergent approaches from a shared analysis baseline.
+
+A **fork** starts from a copy of an existing conversation and then goes its own way. Say an agent has spent twenty minutes analyzing a codebase and now you want to compare two refactoring strategies. Instead of redoing the analysis twice, you fork the session twice. Each fork inherits the full analysis and explores one strategy, and the original session is left untouched.
+
+| | Fresh subagent | Fork |
+|---|---|---|
+| Starting context | Only its system prompt and the delegation prompt | A copy of the parent conversation so far |
+| Best for | Focused, independent subtasks | Comparing alternatives that build on the same analysis |
+| Main risk | Missing context you forgot to pass | Carrying over stale or irrelevant context |
+
+Lesson 1.9 covers the session mechanics (`fork_session`, `--resume`, and when to start fresh with a summary instead).
+
+## How this shows up on the exam
+
+- **"The report's citations are missing or wrong"** → findings were passed as prose without metadata. Require structured records that separate claims from sources, and pass them intact.
+- **"The synthesis subagent's output is vague or misses findings"** → the coordinator passed pointers or thin summaries. Include the complete findings in the delegation.
+- **"Research takes as long as the sum of every subtask"** → the coordinator spawns one Task per turn. Emit multiple Task calls in one response for independent work.
+- **"Subagents fail when a planned search comes up empty"** → the coordinator prompt is procedural. Rewrite it around goals and quality criteria.
+
+<KeyTakeaways>
+
+- The delegation prompt is the subagent's only source of task context. Put **complete findings** in it, not pointers or thin summaries.
+- Pass findings as **structured records**: claim and excerpt kept separate from source URL, title, page, and date, so attribution survives each handoff.
+- Spawn independent subagents with **multiple Task calls in one response**. Latency becomes the slowest subtask instead of the sum. Keep dependent steps in order.
+- Coordinator prompts should state **goals and quality criteria**, not scripts. Goal-based is still specific: audience, scope, and evidence bar.
+- A **fork** copies an existing conversation so you can explore alternatives from a shared baseline. Fresh subagents start with nothing.
+
+</KeyTakeaways>
