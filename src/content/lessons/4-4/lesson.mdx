@@ -1,3 +1,6 @@
+import { ParseFailureVsToolUse } from "./diagrams/ParseFailureVsToolUse";
+import { NormalizationFunnel } from "./diagrams/NormalizationFunnel";
+
 ## Why "just return JSON" isn't enough
 
 The simplest way to get structured data from Claude is to ask for it: "Return the result as JSON with these fields." That works most of the time. In a pipeline that processes 50,000 documents, "most of the time" means hundreds of failures: a trailing comma, an unescaped quote, a stray sentence before the opening brace, or a field renamed from `invoice_date` to `date`. Each one breaks your parser.
@@ -56,6 +59,10 @@ Two things to notice:
 - **You read `block.input`**, the arguments of the `tool_use` block. It's already parsed into a dictionary. There's no JSON string for you to parse, so there's no parse error to catch.
 - **`tool_choice`** controls whether a call is guaranteed. Lesson 2.4 covered the options: `auto` may return text instead, `any` guarantees *some* tool call (the right choice when several extraction schemas exist and the document type is unknown), and forced selection guarantees *this* tool. For a single-schema extraction like this one, forcing the tool is simplest.
 
+<Figure caption="Reading the tool_use block's input skips the parse step that breaks on prompted JSON.">
+  <ParseFailureVsToolUse />
+</Figure>
+
 ## Syntax guaranteed, semantics not
 
 This is the most tested idea in this task statement. A schema-enforced tool call guarantees the output is **syntactically valid and shaped like the schema**. It does **not** guarantee the values are **correct**:
@@ -89,6 +96,10 @@ Normalization rules:
 ```
 
 Put the short, universal rules in the field descriptions (like "ISO 8601 date" above) and the fuller rules in the prompt. The schema guarantees the shape, and the rules make the values consistent.
+
+<Figure caption="Normalization rules collapse every raw format a document uses into one canonical value.">
+  <NormalizationFunnel />
+</Figure>
 
 ## How this shows up on the exam
 

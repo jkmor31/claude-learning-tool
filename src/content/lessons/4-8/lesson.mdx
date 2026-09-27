@@ -1,3 +1,5 @@
+import { MultiPassReview } from "./diagrams/MultiPassReview";
+
 ## One reviewer, one pass, isn't enough at scale
 
 The last task statement in Domain 4 is about **architecture**, not wording: how to arrange review work across instances and passes so it catches more and contradicts itself less. Task Statement 4.6 has three ideas: **independent review instances**, **multi-pass review** (per-file passes plus integration passes), and **verification passes with self-reported confidence** for routing.
@@ -36,11 +38,9 @@ The guide's architecture splits the work, as Lesson 1.8 previewed:
 1. **Per-file local passes.** Each file is reviewed on its own (in parallel, often as separate instances) for **local issues**: logic errors, null handling, resource leaks, and style violations that matter. Each pass has full attention on one file.
 2. **Cross-file integration passes.** A separate pass looks at **data flow and contracts between files**: does the API layer's new field reach the database layer? Did a renamed function get updated at every call site? Is validation done once, in the right place?
 
-```text
-file1 -> [local pass] --+
-file2 -> [local pass] --+--> [integration pass] -> combined
-file3 -> [local pass] --+    (cross-file flow)     findings
-```
+<Figure caption="Local passes run in parallel per file; only the integration pass looks across all of them.">
+  <MultiPassReview />
+</Figure>
 
 The integration pass can take the local findings as input, along with interface summaries of each file (signatures, data shapes, what each function assumes), instead of every file in full. It stays focused on what only a cross-file view can see.
 
