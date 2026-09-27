@@ -1,3 +1,5 @@
+import { ResearchArchitecture } from "./diagrams/ResearchArchitecture";
+
 ## The system
 
 You're building a **multi-agent research system** with the Claude Agent SDK. A coordinator delegates to four specialized subagents: one **searches the web**, one **analyzes documents**, one **synthesizes findings** and one **generates reports**. Given a topic, the system produces a comprehensive report with citations.
@@ -8,27 +10,9 @@ The most useful habit here is to **trace a symptom back to the stage that caused
 
 ## Reference architecture
 
-```text
-                topic                   manifest on resume (5.5)
-                  |                                |
-                  v                                v
-   +-----------------------------------------------------------+
-   |                        Coordinator                        |
-   |  decompose, partition, delegate, check coverage           |
-   +-----------------------------------------------------------+
-       |  ^         |  ^            |  ^           |  ^
-       v  |         v  |            v  |           v  |
-   +--------+   +----------+   +-----------+   +---------+
-   | Search |   |   Doc    |   | Synthesis |   | Report  |
-   |        |   | analysis |   |           |   |         |
-   +--------+   +----------+   +-----------+   +---------+
-                                     |
-                                     v
-                               verify_fact (scoped, 2.3)
-
-   v  Task call with goals and complete inputs, in parallel (1.5)
-   ^  structured results or structured errors (5.4)
-```
+<Figure caption="Every Task call and every result passes through the coordinator, and only synthesis gets a narrow cross-role tool.">
+  <ResearchArchitecture />
+</Figure>
 
 Every arrow goes through the coordinator. Subagents never call each other directly, and even the report agent gets its input from the coordinator (Lesson 1.2). That gives you one place to log, handle errors and control what each agent sees.
 
