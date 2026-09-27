@@ -22,9 +22,14 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full font-sans lg:flex">
+      <body className="flex min-h-full flex-col font-sans lg:flex-row">
         <Sidebar builtIds={[...builtLessonIds]} />
-        <main className="min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-12 lg:py-12">{children}</main>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main className="flex-1 px-4 py-8 sm:px-8 lg:px-12 lg:py-12">{children}</main>
+          <footer className="border-t border-border px-4 py-5 text-center text-xs text-muted sm:px-8">
+            Independent study aid. Not affiliated with or endorsed by Anthropic. Contains no actual exam content.
+          </footer>
+        </div>
       </body>
     </html>
   );

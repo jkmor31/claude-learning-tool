@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# third-party reference material (e.g. the official exam guide) — never redistribute
+/reference/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
