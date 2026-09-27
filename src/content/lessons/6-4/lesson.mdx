@@ -1,0 +1,122 @@
+## The system
+
+You're building **developer productivity tools** with the Claude Agent SDK. The agent helps engineers **explore unfamiliar codebases**, **understand legacy systems**, **generate boilerplate** and **automate repetitive tasks**. It uses the built-in tools (Read, Write, Edit, Bash, Grep, Glob) and connects to MCP servers.
+
+The primary domains are **Tool Design & MCP** (Domain 2), **Claude Code Configuration & Workflows** (Domain 3) and **Agentic Architecture** (Domain 1). Where the support and research scenarios test pipelines, this one tests **tool judgment**: which tool, which server, which decomposition, and how much access to give.
+
+## Reference architecture
+
+Picture an internal assistant called `devhelper` at a fictional freight company whose core system is a 12-year-old Java monolith.
+
+```text
+devhelper (Agent SDK)
+  main agent       Read  Grep  Glob  Edit  Write  Bash  Task
+  |                goals, conventions, when to delegate       1.8, 3.7
+  |
+  +-- subagent: code-mapper    Read  Grep  Glob (read-only)   1.4, 2.3
+  |     answers one question, returns a summary               5.5
+  |
+  +-- MCP: github (existing server)                           2.6
+  +-- MCP: service-catalog (custom)                           2.6
+  |     resource: catalog of services, owners, entry points
+  |     tool:     find_symbol (resolves aliases, re-exports)
+  |
+  +-- hooks
+        PreToolUse   block writes outside the repo,
+                     block destructive Bash (force push, rm -rf)  1.7
+        PostToolUse  run the formatter after Edit/Write           1.7
+```
+
+### Picking the right built-in tool
+
+Most productivity questions are really tool-selection questions (Lesson 2.7):
+
+| Need | Tool | Not |
+|---|---|---|
+| Every place `calculateSurcharge` is called | **Grep** (searches contents) | Glob, which only sees names |
+| Every `*Repository.java` file | **Glob** (matches paths) | Grep, since the name isn't in the file text |
+| Change one method signature | **Edit** (unique anchor) | Write, which replaces the whole file |
+| Edit fails: anchor text appears four times | **Read** the file, then **Write** it back | Retrying Edit with the same anchor |
+| Run the tests or the build | **Bash** | |
+| Read a file | **Read** | `cat` through Bash |
+
+### Exploring a legacy system
+
+Don't read everything up front. Grep for an entry point (a route, an error message, a class name), Read that file, and follow its imports as the trace needs them. Stop when you understand the flow (Lesson 2.7).
+
+Legacy code often re-exports functions under other names. Before searching for callers, **list every name the wrapper module exports**, then Grep for each one. Searching only for the original name misses callers that use an alias.
+
+For big questions ("how does billing talk to the rate engine?"), hand the verbose digging to a **read-only subagent** that returns a summary, and keep key findings in a **scratchpad file** so they survive a long session (Lesson 5.5).
+
+### Choosing a decomposition
+
+Two very different kinds of task come through this tool (Lesson 1.8):
+
+| Task | Pattern | Why |
+|---|---|---|
+| "Generate a CRUD endpoint, its DTOs and its tests" | **Prompt chaining**: a fixed sequence (generate → lint → test → fix) | The steps are known in advance |
+| "Add comprehensive tests to the legacy billing module" | **Dynamic decomposition**: map structure, find high-impact areas, make a prioritized plan, adapt as you learn | You can't know the subtasks until you've looked |
+
+For boilerplate, the fastest route to consistent output is to show, not describe. Point the agent at an existing endpoint as a template, or give it a couple of input/output examples, and put standing conventions in `CLAUDE.md` or a skill so every run gets them (Lessons 3.7 and 3.4).
+
+### Integrating MCP servers
+
+Three decisions come up (Lessons 2.5 and 2.6):
+
+- **Build or buy.** Use an **existing** server for GitHub, Jira or Postgres. Build a **custom** server only for what's specific to your company, such as the service catalog.
+- **Resources for catalogs.** Expose the list of services, owners and entry points as a **resource**, so the agent can see what exists without a string of exploratory tool calls.
+- **Descriptions that compete.** If the agent keeps using Grep instead of your `find_symbol` tool, the fix is a description that says what `find_symbol` does better (it resolves aliases and re-exports), what it returns, and when to use Grep instead.
+
+Shared servers go in the project's `.mcp.json` with credentials from environment variables. Personal or experimental servers go in the user's own config.
+
+### Access and guardrails
+
+Give each part of the system only the tools it needs (Lesson 2.3). The code-mapper subagent is read-only because it never needs to change anything. An agent with too many tools picks among them less reliably.
+
+Some rules must hold every time: never write outside the repository, never force-push, always run the formatter. Those belong in **hooks**, not in the prompt (Lesson 1.7). A PreToolUse hook denies the call and tells the agent why. A PostToolUse hook runs the formatter after every Edit or Write.
+
+### Comparing approaches
+
+When an engineer wants to compare two refactoring strategies for the same module, run the shared analysis once and then **fork the session** (`fork_session`) into two branches. Each branch explores one strategy from the same starting point without contaminating the other (Lesson 1.9).
+
+## Failure clinic
+
+| Symptom in the stem | Root cause | Fix | Lesson |
+|---|---|---|---|
+| "Find all callers" misses half of them | Callers use a re-exported alias | List all exported names, Grep for each | 2.7 |
+| Agent uses Glob to find a function's usages | Wrong tool: names vs contents | Grep | 2.7 |
+| Edit keeps failing on a config file | Anchor text isn't unique | Read + Write | 2.7 |
+| Agent reads 80 files before answering, then runs out of context | Upfront reading | Grep for entry points, follow imports; delegate to a subagent | 2.7, 5.5 |
+| Agent ignores the custom `find_symbol` tool | Vague description | Describe capabilities, outputs, and when to prefer it | 2.6 |
+| Team wants GitHub access and plans to write a server | Build instead of buy | Use the existing GitHub server | 2.6 |
+| "Add tests to legacy code" produced a rigid plan that missed key modules | Fixed pipeline for an open-ended task | Dynamic decomposition that adapts | 1.8 |
+| Generated boilerplate drifts from house style | Prose-only conventions | Template file or examples, conventions in `CLAUDE.md` or a skill | 3.7, 3.4 |
+| Agent once force-pushed despite the prompt | Prompt-only rule | PreToolUse hook | 1.7 |
+
+## Distractor patterns
+
+- **Grep and Glob swapped.** Contents are Grep; names and paths are Glob.
+- **"Read every file first for full context."** Incremental exploration wins.
+- **"Remove Grep so the agent has to use the MCP tool."** Fix the description instead; Grep is still right for free text.
+- **"Write our own GitHub server for more control."** Existing servers already handle auth, pagination and API changes.
+- **"Give every agent every tool, just in case."** Scope tools to the role.
+- **Prompt rules for safety-critical actions.** Use hooks.
+
+## How this shows up on the exam
+
+- **Searching code contents** → Grep. **Finding files by pattern** → Glob. **Edit fails on non-unique text** → Read + Write.
+- **Understanding unfamiliar code** → Grep for entry points, then Read and follow imports; delegate verbose exploration to a subagent.
+- **Missing callers** → trace every exported name through wrapper modules.
+- **Predictable multi-step generation** → prompt chaining. **Open-ended investigation** → dynamic decomposition.
+- **Standard integration** → existing MCP server. **Company-specific** → custom server, with catalogs as resources.
+- **Rules that must always hold** → hooks.
+
+<KeyTakeaways>
+
+- Most questions here are **tool judgment**: Grep for contents, Glob for names, Edit for targeted changes, Read + Write when Edit can't find a unique anchor, Bash for running things.
+- Explore **incrementally**, trace through **every exported name**, and hand verbose discovery to a **read-only subagent**.
+- Use **prompt chaining** for predictable generation and **dynamic decomposition** for open-ended investigation.
+- Prefer **existing MCP servers** for standard systems, expose catalogs as **resources**, and write MCP tool descriptions that explain when they beat the built-ins.
+- Scope tools **to each role**, and enforce must-hold rules with **hooks**.
+
+</KeyTakeaways>

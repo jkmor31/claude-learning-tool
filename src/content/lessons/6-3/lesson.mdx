@@ -1,0 +1,150 @@
+## The system
+
+You're building a **multi-agent research system** with the Claude Agent SDK. A coordinator delegates to four specialized subagents: one **searches the web**, one **analyzes documents**, one **synthesizes findings** and one **generates reports**. Given a topic, the system produces a comprehensive report with citations.
+
+The primary domains are **Agentic Architecture** (Domain 1), **Tool Design & MCP** (Domain 2) and **Context Management & Reliability** (Domain 5). This scenario tests Module 1 more heavily than any other. Most questions describe a report that came out wrong and ask which part of the pipeline caused it.
+
+The most useful habit here is to **trace a symptom back to the stage that caused it**. When every subagent did its assigned job correctly and the report is still wrong, look at what the coordinator assigned or passed along.
+
+## Reference architecture
+
+```text
+                topic                   manifest on resume (5.5)
+                  |                                |
+                  v                                v
+   +-----------------------------------------------------------+
+   |                        Coordinator                        |
+   |  decompose, partition, delegate, check coverage           |
+   +-----------------------------------------------------------+
+       |  ^         |  ^            |  ^           |  ^
+       v  |         v  |            v  |           v  |
+   +--------+   +----------+   +-----------+   +---------+
+   | Search |   |   Doc    |   | Synthesis |   | Report  |
+   |        |   | analysis |   |           |   |         |
+   +--------+   +----------+   +-----------+   +---------+
+                                     |
+                                     v
+                               verify_fact (scoped, 2.3)
+
+   v  Task call with goals and complete inputs, in parallel (1.5)
+   ^  structured results or structured errors (5.4)
+```
+
+Every arrow goes through the coordinator. Subagents never call each other directly, and even the report agent gets its input from the coordinator (Lesson 1.2). That gives you one place to log, handle errors and control what each agent sees.
+
+### The coordinator
+
+The coordinator does four jobs (Lessons 1.2 and 1.3):
+
+- **Decompose the topic broadly enough.** "The impact of remote work on cities" needs housing, transit, retail, tax revenue and office real estate, not just three flavors of office real estate. Overly narrow decomposition is the most common root cause of incomplete reports, and it shows up in the coordinator's logs, not in the subagents' work.
+- **Partition the work** so subagents don't overlap: assign distinct subtopics or source types to each.
+- **Choose which subagents to run.** A simple factual question may need one search, not the full four-stage pipeline.
+- **Refine iteratively.** After synthesis, check the result for gaps, send targeted follow-up queries to search and analysis, and run synthesis again until coverage is sufficient.
+
+Give the coordinator **research goals and quality criteria**, not a step-by-step procedure. Subagents adapt better when they know what a good result looks like.
+
+### Spawning and passing context
+
+The coordinator spawns subagents with the **Task tool** (`Agent` in current SDK versions), so it must be in the coordinator's `allowedTools` (Lesson 1.4). Each subagent type has an `AgentDefinition` with its own description, system prompt and tool list.
+
+Two rules cause most of the questions in this area (Lesson 1.5):
+
+- **Subagents don't inherit the coordinator's context.** The synthesis agent sees only what's in its prompt, so the coordinator must include the complete findings from search and analysis there. "It should already know" is never the answer.
+- **Parallel work goes in one response.** When three searches are independent, the coordinator emits three Task calls in a single turn, not one per turn.
+
+Pass findings as **structured data that keeps content and metadata separate**:
+
+```json
+{
+  "claim": "Downtown transit ridership recovered to 71% of 2019 levels.",
+  "excerpt": "weekday ridership averaged 71 percent of the 2019 baseline",
+  "source": "Metro Mobility Quarterly, Q2 2026",
+  "url": "https://example.org/mmq-q2-2026",
+  "published": "2026-07-15",
+  "data_period": "2026-Q2"
+}
+```
+
+If the coordinator condenses these into a prose summary before passing them on, the citations are lost and synthesis can't get them back (Lesson 5.7).
+
+### Tools per role
+
+Each subagent gets only the tools its role needs, usually four or five (Lesson 2.3). The search agent has search and fetch tools. The analysis agent has a `load_document` tool that validates document URLs instead of a generic `fetch_url`. The synthesis agent doesn't get web search: an agent with tools outside its specialty tends to misuse them.
+
+The one exception is a **scoped cross-role tool for a frequent need**. If synthesis often needs to check a date or a name, give it a narrow `verify_fact` tool, and keep sending deeper investigations back through the coordinator.
+
+### Errors and partial results
+
+Search will time out, sources will be paywalled, and documents will fail to parse. Subagents should **retry transient failures locally** and propagate only what they can't resolve, with structured context (Lesson 5.4):
+
+```json
+{
+  "status": "error",
+  "failureType": "timeout",
+  "attempted": "search: municipal tax revenue remote work 2025",
+  "partialResults": [ "...2 of 5 sources retrieved..." ],
+  "alternatives": ["narrow to one metro area", "use the state revenue database"]
+}
+```
+
+Keep two things apart. An **access failure** (the search timed out) needs a decision about retrying. A **valid empty result** (the search ran and nothing matched) is a finding in its own right. Neither should be reported as the other.
+
+Two opposite anti-patterns both lose: **suppressing the error** (returning an empty list marked as success) and **ending the whole run** because one search failed. The coordinator should carry on with what it has and **annotate the report with coverage gaps**.
+
+### Synthesis and the report
+
+The synthesis agent's input is long, so position matters (Lesson 5.2). Put a **key findings summary at the top** and organize the detail under clear section headers, so the middle doesn't get lost.
+
+The report itself should keep provenance (Lesson 5.7):
+
+- Every claim is traceable to a source through the claim records.
+- When credible sources disagree, **show both values with attribution** and any method difference. Don't pick one or average them.
+- **Dates** separate a trend from a contradiction.
+- The report separates **well-established** findings from **contested** ones and lists **gaps**.
+
+### Surviving a crash
+
+A long research run can fail partway through. Each agent writes its state to a known location, and the coordinator keeps a **manifest** of what's complete. On restart, the coordinator loads the manifest and passes the relevant state into each agent's prompt, instead of starting over (Lesson 5.5).
+
+## Failure clinic
+
+| Symptom in the stem | Root cause | Fix | Lesson |
+|---|---|---|---|
+| Report misses whole areas of the topic, and every subagent did its job | Coordinator's decomposition too narrow | Broader decomposition, coverage check before synthesis | 1.2, 1.3 |
+| Two search agents return mostly the same sources | Overlapping assignments | Partition by subtopic or source type | 1.3 |
+| Synthesis output has no citations, but search recorded them | Coordinator passed prose summaries | Pass structured claim records through unchanged | 1.5, 5.7 |
+| Synthesis says it has "no findings to work with" | Findings not in its prompt | Include complete prior findings in the prompt | 1.5 |
+| Subagents run one after another although they're independent | One Task call per turn | Several Task calls in one response | 1.5 |
+| Coordinator can't spawn subagents at all | Task missing from `allowedTools` | Add it | 1.4 |
+| Synthesis agent runs its own web searches badly | Tools outside its role | Remove them; add a scoped `verify_fact` if needed | 2.3 |
+| Report states a topic has "no research" when the search timed out | Error suppressed as empty success | Structured errors, access failure vs empty result | 5.4 |
+| One failed search kills the whole run | Exception propagated to the top | Continue with partial results, annotate gaps | 5.4 |
+| Report picks one of two conflicting statistics | Arbitrary selection | Show both with sources and method notes | 5.7 |
+
+## Distractor patterns
+
+- **Blaming a downstream agent** that did exactly what it was asked. Check the assignment first.
+- **"Give the synthesis agent all the search tools"** to cut round trips. Scope a narrow tool instead.
+- **"Let subagents share memory"** or assuming they see the coordinator's history. They only see their prompt.
+- **Generic errors** ("search unavailable") that hide what was tried, and **retry logic that hides everything until it gives up**.
+- **Averaging or picking** conflicting figures, instead of showing both.
+- **Step-by-step procedural prompts** for subagents, instead of goals and quality criteria.
+
+## How this shows up on the exam
+
+- **Incomplete coverage** with healthy subagents → the **coordinator's decomposition**.
+- **Lost citations** → **structured claim records** preserved through every handoff.
+- **Subagent lacks information** → it wasn't **in its prompt**; subagents don't inherit context.
+- **Latency from sequential spawning** → **multiple Task calls in one response**.
+- **Failures** → **structured error context**, local retry, continue with **partial results** and **coverage annotations**.
+- **Conflicts** → **both values, attributed**, in a contested section.
+
+<KeyTakeaways>
+
+- Route **everything through the coordinator**, and when the report is wrong, check the coordinator's decomposition and handoffs before blaming a subagent.
+- Subagents **don't inherit context**: put complete, **structured** findings in each prompt, and spawn independent work **in parallel in one response**.
+- Scope each subagent's **tools to its role**, with a narrow cross-role tool only for frequent needs.
+- Propagate **structured errors** with what was tried and partial results, tell access failures from empty results, and **annotate gaps** rather than failing or hiding them.
+- Keep **provenance** end to end: claim-source records, dates, both sides of conflicts, and a report that separates established from contested findings.
+
+</KeyTakeaways>

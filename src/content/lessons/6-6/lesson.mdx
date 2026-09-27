@@ -1,0 +1,177 @@
+## The system
+
+You're building a **structured data extraction system** with Claude. It pulls information out of unstructured documents, **validates the output against JSON schemas**, keeps accuracy high, **handles edge cases gracefully** and feeds **downstream systems** that expect clean data.
+
+The primary domains are **Prompt Engineering & Structured Output** (Domain 4) and **Context Management & Reliability** (Domain 5). This scenario rewards thinking about the whole pipeline: a schema that allows honest answers, a prompt that shows what good output looks like, code that checks meaning as well as structure, and people reviewing exactly the cases that need them.
+
+## Reference pipeline
+
+Picture the accounts-payable team at a fictional distributor, Harborline Supply. Every night, about 8,000 supplier invoices arrive in dozens of layouts, and a few urgent ones arrive during the day. The ERP system downstream accepts only valid, complete records.
+
+```text
+documents
+  |  urgent: synchronous call        nightly: Message Batches     4.7
+  |                                  (custom_id = document id)
+  v
+extraction call                                                   4.4
+  tool: extract_invoice (strict JSON schema)                       4.5
+  prompt: field definitions, normalization rules,
+          2-4 examples of different layouts                       4.3
+  |
+  v
+validator (your code): schema + semantic checks                   4.6
+  |-- fixable error  -> retry with document, output, exact errors
+  |-- info absent    -> no retry; null stays null
+  v
+router: calibrated field confidence, conflict flags               5.6
+  |-- low confidence or conflict -> human review queue
+  |-- high confidence -> ERP, plus a stratified QA sample
+```
+
+### A schema that allows honest answers
+
+The schema decides what the model is *allowed* to say (Lesson 4.5):
+
+```json
+{
+  "name": "extract_invoice",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "invoice_number": { "type": "string" },
+      "invoice_date": { "type": "string" },
+      "po_number": { "type": ["string", "null"] },
+      "payment_terms": {
+        "type": "string",
+        "enum": ["net_30", "net_60", "due_on_receipt",
+                 "other", "unclear"]
+      },
+      "payment_terms_detail": { "type": ["string", "null"] },
+      "line_items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": { "type": "string" },
+            "amount": { "type": "number" }
+          }
+        }
+      },
+      "stated_total": { "type": "number" },
+      "calculated_total": { "type": "number" },
+      "conflict_detected": { "type": "boolean" }
+    },
+    "required": ["invoice_number", "invoice_date",
+                 "po_number", "payment_terms",
+                 "payment_terms_detail", "line_items",
+                 "stated_total", "calculated_total",
+                 "conflict_detected"]
+  }
+}
+```
+
+The decisions that matter:
+
+- **Nullable fields for information that may be missing.** Many invoices have no PO number. If `po_number` must be a non-null string, the model will produce one, and a fabricated PO number is worse than none.
+- **Enums with an escape hatch.** `"other"` plus a detail field handles terms you didn't anticipate, such as "2/10 net 30". `"unclear"` handles a smudged or ambiguous scan without forcing a guess.
+- **Self-check fields.** Extract `stated_total` (what the document says) *and* `calculated_total` (the sum of the line items), and set `conflict_detected` when the source contradicts itself. Your code can then compare them.
+
+### A prompt that shows, not just tells
+
+Add **format normalization rules** next to the schema (dates to `YYYY-MM-DD`, amounts without currency symbols, "12 ea" to quantity 12). Then add **two to four examples of different layouts**: a clean tabular invoice, one where line items are narrative text, and one with the total on a second page (Lesson 4.3). Examples of varied structure reduce hallucinated values more than longer instructions do.
+
+### Enforcing structure
+
+Use **`tool_use` with a JSON schema** for output that's guaranteed to parse (Lesson 4.4). Configure `tool_choice` for the situation (Lesson 2.4):
+
+- **`"any"`** when you have several extraction tools (invoice, credit note, receipt) and don't know which document type arrived. The model must call one of them.
+- **Forced tool** (`{"type": "tool", "name": "extract_metadata"}`) when one extraction must run before later enrichment steps.
+
+Structure is not correctness. A schema-valid extraction can still have line items that don't add up to the total, or the ship-to address in the bill-to field. Those are **semantic errors**, and your validator has to catch them.
+
+<Callout type="note" title="Real-world note: newer models and forced tool choice">
+Some newer models reject `tool_choice` `"any"` and forced tool selection (Lesson 2.4). On those models, use `strict: true` on the extraction tool, or structured outputs through `output_config.format`, to guarantee schema-valid output (Lesson 4.4). The exam's answers use `tool_choice`, so pick those on the exam.
+</Callout>
+
+### Validation and retry
+
+When validation fails, send a follow-up request containing **the original document, the failed extraction and the specific errors** (Lesson 4.6):
+
+```text
+Validation failed for invoice INV-20931:
+- calculated_total (1,284.50) does not match stated_total (1,248.50).
+  Re-check each line item's amount against the document.
+- invoice_date "03/04/26" is not YYYY-MM-DD. The supplier is UK-based.
+```
+
+Know when retrying helps and when it can't:
+
+| Error | Will a retry help? |
+|---|---|
+| Wrong format, value in the wrong field, a misread digit | **Yes.** The information is in the document. |
+| PO number that isn't on the invoice at all | **No.** It's absent. Accept `null` and route the record if the field matters. |
+| Terms that refer to a separate master agreement not provided | **No.** The information is in another document. |
+
+Cap retries, and send anything still failing to review rather than looping.
+
+### Volume: batch or synchronous
+
+The nightly run goes through the **Message Batches API**: half the cost, results within 24 hours, each request tagged with the document ID as its `custom_id` (Lesson 4.7). Urgent invoices use the synchronous API. When some batch requests fail, **resubmit only those**, by `custom_id`, with a fix such as splitting a 90-page contract into chunks. Before a large run, refine the prompt on a **sample** so the first pass succeeds as often as possible.
+
+If the business promises results within 30 hours and a batch can take 24, a document can wait at most 6 hours before submission. Keeping a margin for handling failures, submit every 4 hours (Lesson 4.7).
+
+### Human review where it counts
+
+Reviewers are limited, so route them the right records (Lesson 5.6):
+
+- Have the model output **field-level confidence**, and **calibrate the thresholds** against a labeled validation set. Uncalibrated scores aren't trustworthy on their own.
+- Send **low-confidence fields** and **records with `conflict_detected`** to review first.
+- Before automating anything, check accuracy **by document type and field**. A 97% overall rate can hide a supplier layout that's right only 70% of the time.
+- Keep a **stratified random sample** of high-confidence records going to QA, to measure error rates and spot new failure patterns.
+
+Keep **provenance** for each value: the page or section it came from. Reviewers can then check a field in seconds, and downstream systems can trace a bad number back to its source (Lesson 5.7).
+
+## Failure clinic
+
+| Symptom in the stem | Root cause | Fix | Lesson |
+|---|---|---|---|
+| Output sometimes isn't valid JSON | Prompt-only formatting | `tool_use` with a JSON schema | 4.4 |
+| Model returns text instead of calling the tool | `tool_choice: "auto"` | `"any"` or a forced tool | 2.4 |
+| Plausible PO numbers appear on invoices that have none | Required non-null field | Make it nullable | 4.5 |
+| New payment terms are forced into the wrong category | Closed enum | Add `"other"` + detail, and `"unclear"` | 4.5 |
+| Valid JSON, but line items don't sum to the total | Semantic error | Validator + `calculated_total` + retry with the error | 4.6 |
+| Retries loop on a field that's never filled | Information absent | Stop retrying; accept `null` and route | 4.6 |
+| Accuracy drops on narrative-style invoices | Examples cover one layout | Few-shot examples of varied layouts | 4.3 |
+| 97% overall accuracy, but one supplier's records are often wrong | Aggregate hides a segment | Accuracy by document type and field | 5.6 |
+| Nightly job misses the 30-hour promise | Submission too infrequent | Submit every 4 hours (6 at the very most) | 4.7 |
+| A few batch requests fail on huge documents | Over the context limit | Resubmit only those by `custom_id`, chunked | 4.7 |
+
+## Distractor patterns
+
+- **"Ask for JSON in the prompt"** or **"add a JSON example"** instead of tool use with a schema.
+- **"Make every field required so nothing is missing."** That's how fabricated values get in.
+- **"Retry until it passes"** for information that isn't in the document.
+- **"Trust the model's self-reported confidence"** without calibrating it on labeled data.
+- **"Overall accuracy is 97%, so remove human review."** Check each segment first.
+- **Synchronous calls for the nightly bulk run**, or **batch for the urgent path**.
+- **Resubmitting the whole batch** when a few requests failed.
+
+## How this shows up on the exam
+
+- **Guaranteed parseable output** → `tool_use` with a JSON schema; **`"any"`** when the document type is unknown; **forced** to control ordering.
+- **Fabricated values** → **nullable** fields. **Unanticipated categories** → `"other"` + detail, and `"unclear"`.
+- **Values that don't add up** → **semantic validation**, `calculated_total` vs `stated_total`, retry with the specific error.
+- **When retry won't help** → the information **isn't in the source**.
+- **Varied layouts** → **few-shot examples** of different structures, plus normalization rules.
+- **Cost and volume** → **batches** with `custom_id`, resubmit only failures, submission frequency from the SLA.
+- **Human review** → **calibrated field-level confidence**, **per-segment accuracy**, **stratified sampling**.
+
+<KeyTakeaways>
+
+- Design the schema to allow honest answers: **nullable** fields, enums with **`"other"`** and **`"unclear"`**, and **self-check fields** like `calculated_total` and `conflict_detected`.
+- Use **tool use with a schema** for structure, `tool_choice` **`"any"`** or **forced** as the situation requires, and remember that structure doesn't guarantee **meaning**.
+- Retry with the **document, the failed output and the specific errors**, but only for errors a retry can fix.
+- Run bulk work through **batches** keyed by `custom_id`, and resubmit only what failed.
+- Route review with **calibrated field-level confidence** and conflict flags, check accuracy **per segment**, and keep a **stratified QA sample**.
+
+</KeyTakeaways>

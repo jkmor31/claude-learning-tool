@@ -1,0 +1,125 @@
+## The system
+
+You're integrating **Claude Code into a CI/CD pipeline**. It runs automated code reviews, generates test cases and posts feedback on pull requests. The requirement that shapes everything: feedback must be **actionable**, with **few false positives**, because developers stop reading a reviewer that cries wolf.
+
+The primary domains are **Claude Code Configuration & Workflows** (Domain 3) and **Prompt Engineering & Structured Output** (Domain 4). Questions split roughly in two: *mechanics* (how to run Claude Code unattended and get parseable output) and *signal quality* (how to make the findings worth reading).
+
+## Reference pipeline
+
+Picture a fictional payments company, Ledgerline, running three jobs:
+
+```text
+pull_request opened / updated
+  |
+  +-- review job (blocking, synchronous API)                     3.8
+  |     claude -p ... --output-format json --json-schema ...
+  |     read-only tools; CLAUDE.md supplies review criteria      3.9, 4.1
+  |     per-file passes + one integration pass                   4.8
+  |     prior findings in context: report only new/unaddressed   3.9
+  |     -> inline PR comments from structured_output
+  |
+  +-- test job (non-blocking)                                    3.9
+        existing tests + fixtures in context; no duplicates
+
+nightly
+  +-- tech-debt audit (Message Batches API, custom_id per file)  4.7
+```
+
+### Running unattended
+
+Claude Code in a pipeline must run **non-interactively**, with the **`-p`** (`--print`) flag. Without it, the job waits for input that never comes and hangs (Lesson 3.8). Made-up alternatives such as a `CLAUDE_HEADLESS` variable or a `--batch` flag don't exist.
+
+```bash
+claude -p "Review the changes in this PR against the criteria in CLAUDE.md." \
+  --output-format json \
+  --json-schema "$(cat .github/review-schema.json)" \
+  --allowedTools "Read,Grep,Glob"
+```
+
+- **`--output-format json` with `--json-schema`** produces schema-conforming output in the result's `structured_output` field. A script turns each finding into an inline PR comment, with no regex scraping of prose.
+- **Tool access is decided up front**, because nobody is there to approve anything. A review job needs to read; it has no reason to edit files or push.
+
+### Giving CI the project's context
+
+CI-invoked Claude Code reads the repository's `CLAUDE.md`, so that's where the review criteria, testing standards and available fixtures belong (Lesson 3.9). A test generator that knows about `fixtures/merchants.ts` and the rule "no tests for trivial getters" writes fewer low-value tests.
+
+### Making findings worth reading
+
+This is where most of the scenario's questions sit (Lessons 4.1, 4.2 and 3.9):
+
+- **Explicit criteria beat vague ones.** "Check that comments are accurate" produces noise. "Flag a comment only when the behavior it describes contradicts what the code does" produces findings.
+- **Say what to report and what to skip.** Report bugs, security issues and data-loss risks. Skip minor style and patterns that are consistent with the surrounding code.
+- **"Be conservative" and "only report high-confidence findings" don't work.** They don't tell the model *which* findings are worth reporting.
+- **Define severity with concrete code examples** for each level, so "high" means the same thing on every run.
+- **Show the output format with few-shot examples** when instructions alone produce inconsistent comments.
+- **Temporarily disable a noisy category.** If "performance" findings are mostly wrong, turn that category off while you fix its criteria. Its false positives are eroding trust in the accurate categories.
+
+### Reviews that scale
+
+Two structural problems appear as PRs grow (Lesson 4.8):
+
+- **Attention dilution.** One pass over 20 files gives uneven depth and contradictory findings. Split it: **per-file passes** for local issues, then an **integration pass** for cross-file data flow.
+- **Self-review.** The session that generated code carries its own reasoning and is poorly placed to question it. Review AI-generated changes with an **independent instance** that has no access to the generator's context. Asking the same session to "review your work carefully", or turning on extended thinking, isn't the same thing.
+
+### Re-runs and test generation
+
+When a developer pushes a fix, the review runs again. Without context, it repeats every comment it made last time. Include the **prior findings** and instruct it to report only issues that are **new or still unaddressed** (Lesson 3.9).
+
+For test generation, include the **existing test files** so the generator doesn't propose scenarios the suite already covers.
+
+### Synchronous or batch?
+
+The Message Batches API costs 50% less but can take up to 24 hours, with no latency guarantee (Lesson 4.7). Match the API to the workflow:
+
+| Workflow | API | Why |
+|---|---|---|
+| Pre-merge review that blocks the merge | Synchronous | A developer is waiting |
+| Nightly tech-debt or security audit | Batch | Nobody waits; the savings are free |
+| Weekly test-gap report | Batch | Latency-tolerant |
+
+Results come back matched by `custom_id`, so ordering isn't a problem. And batch requests can't run tools mid-request, so work that needs multi-turn tool calls doesn't belong in a batch.
+
+## Failure clinic
+
+| Symptom in the stem | Root cause | Fix | Lesson |
+|---|---|---|---|
+| CI job hangs indefinitely | Interactive mode | `-p` | 3.8 |
+| Script fails to parse Claude's findings | Free-text output | `--output-format json` + `--json-schema` | 3.8 |
+| Developers ignore the bot's comments | High false-positive rate | Explicit report/skip criteria; disable noisy categories | 4.1 |
+| Same issue rated "low" on one PR and "high" on another | Undefined severity | Severity levels with code examples | 4.1 |
+| Every push re-posts last round's comments | No memory of prior findings | Include them; report only new or unaddressed | 3.9 |
+| Generated tests duplicate existing ones | Suite not in context | Include existing tests | 3.9 |
+| Tests are low value and ignore available fixtures | Standards not documented | Testing standards and fixtures in `CLAUDE.md` | 3.9 |
+| Large PR gets uneven, contradictory feedback | Attention dilution | Per-file passes plus integration pass | 4.8 |
+| AI-written PRs pass review with subtle bugs | Same session reviews its own work | Independent review instance | 4.8 |
+| Manager wants all checks on batch to save money | Blocking check on a 24-hour API | Batch only for non-blocking jobs | 4.7 |
+
+## Distractor patterns
+
+- **Nonexistent flags and variables**, or shell tricks such as redirecting stdin, instead of `-p`.
+- **"Be more conservative"** or a **confidence threshold** as the fix for false positives.
+- **"Make developers split their PRs"** instead of fixing the review's structure.
+- **"Use a bigger context window"** for attention dilution.
+- **"Ask the generating session to double-check"** instead of an independent reviewer.
+- **Batch for blocking checks**, with or without a "fall back to real-time if slow" add-on.
+- **Majority voting over several full-PR runs** to filter noise. It multiplies cost and doesn't fix the criteria.
+
+## How this shows up on the exam
+
+- **Hangs** → `-p`. **Parseable output** → `--output-format json` with `--json-schema`.
+- **Project standards for CI** → `CLAUDE.md`.
+- **False positives** → explicit categorical criteria, severity examples, temporarily disabling noisy categories.
+- **Duplicate comments after new commits** → include prior findings, report only new or unaddressed.
+- **Duplicate tests** → include existing tests.
+- **Large PRs** → per-file plus integration passes. **Reviewing generated code** → an independent instance.
+- **Cost** → batch for overnight and weekly work, synchronous for anything blocking.
+
+<KeyTakeaways>
+
+- Run Claude Code in CI with **`-p`**, get machine-parseable findings with **`--output-format json`** and **`--json-schema`**, and decide tool access up front.
+- Put review criteria, testing standards and fixtures in **`CLAUDE.md`** so CI runs get the project's context.
+- Cut false positives with **explicit report/skip criteria** and **severity examples**, not "be conservative"; disable a noisy category while you fix it.
+- Avoid duplicates by including **prior findings** on re-runs and **existing tests** for test generation.
+- Split large reviews into **per-file and integration passes**, review generated code with an **independent instance**, and use **batches** only for work nobody is waiting on.
+
+</KeyTakeaways>

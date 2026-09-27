@@ -291,6 +291,48 @@ export const lessonLoaders: Record<string, Loader> = {
     ]);
     return { Body, quiz, bonus };
   },
+  "6-1": async () => {
+    const [{ default: Body }, { quiz, bonus }] = await Promise.all([
+      import("./lessons/6-1/lesson.mdx"),
+      import("./lessons/6-1/quiz"),
+    ]);
+    return { Body, quiz, bonus };
+  },
+  "6-2": async () => {
+    const [{ default: Body }, { quiz, bonus }] = await Promise.all([
+      import("./lessons/6-2/lesson.mdx"),
+      import("./lessons/6-2/quiz"),
+    ]);
+    return { Body, quiz, bonus };
+  },
+  "6-3": async () => {
+    const [{ default: Body }, { quiz, bonus }] = await Promise.all([
+      import("./lessons/6-3/lesson.mdx"),
+      import("./lessons/6-3/quiz"),
+    ]);
+    return { Body, quiz, bonus };
+  },
+  "6-4": async () => {
+    const [{ default: Body }, { quiz, bonus }] = await Promise.all([
+      import("./lessons/6-4/lesson.mdx"),
+      import("./lessons/6-4/quiz"),
+    ]);
+    return { Body, quiz, bonus };
+  },
+  "6-5": async () => {
+    const [{ default: Body }, { quiz, bonus }] = await Promise.all([
+      import("./lessons/6-5/lesson.mdx"),
+      import("./lessons/6-5/quiz"),
+    ]);
+    return { Body, quiz, bonus };
+  },
+  "6-6": async () => {
+    const [{ default: Body }, { quiz, bonus }] = await Promise.all([
+      import("./lessons/6-6/lesson.mdx"),
+      import("./lessons/6-6/quiz"),
+    ]);
+    return { Body, quiz, bonus };
+  },
 };
 
 export const builtLessonIds = new Set(Object.keys(lessonLoaders));

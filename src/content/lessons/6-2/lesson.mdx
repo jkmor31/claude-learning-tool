@@ -1,0 +1,121 @@
+## The system
+
+Your team uses **Claude Code** every day for code generation, refactoring, debugging and documentation. Your job is to fit it into the team's workflow: shared `CLAUDE.md` configuration, custom slash commands, and good judgment about when to plan and when to just make the change.
+
+The primary domains are **Claude Code Configuration & Workflows** (Domain 3) and **Context Management & Reliability** (Domain 5). Unlike the support-agent scenario, you're not writing an agent loop here. You're configuring a tool so that it behaves the same way for every developer, and using it well in long sessions.
+
+Most questions in this scenario come down to one of three things:
+
+1. **Where does this instruction or workflow belong?** (Which file, which scope.)
+2. **How should this task be run?** (Plan or execute, and how to iterate.)
+3. **Why is the session getting worse?** (Context, and how to recover.)
+
+## Reference setup
+
+Picture a TypeScript monorepo for a fictional logistics company, Parcelwise:
+
+```text
+~/.claude/CLAUDE.md                 personal preferences only          3.1
+~/.claude/commands/standup.md       personal command                   3.3
+
+parcelwise/
+  CLAUDE.md                         team standards, @imports           3.1, 3.2
+  .mcp.json                         shared MCP servers, ${ENV} creds   2.5
+  .claude/
+    rules/
+      api.md        paths: ["src/api/**/*"]                          3.5
+      testing.md    paths: ["**/*.test.*"]                           3.5
+    commands/
+      review.md                     /review for the whole team         3.3
+    skills/
+      release-notes/SKILL.md        context: fork, allowed-tools       3.4
+  packages/
+    web/CLAUDE.md                   web-only conventions               3.1
+```
+
+### Where each kind of instruction goes
+
+This table is the core of the scenario. The question is always "who needs this, and when?"
+
+| You want… | Put it in… | Lesson |
+|---|---|---|
+| Standards every developer gets, always | Project `CLAUDE.md` (committed) | 3.1 |
+| Your own preferences, not the team's | `~/.claude/CLAUDE.md` | 3.1 |
+| Conventions for one package or folder | That folder's `CLAUDE.md` | 3.1 |
+| Conventions for a *file type* spread across the repo | `.claude/rules/` file with `paths` globs | 3.5 |
+| A large `CLAUDE.md` split into topic files | `@import` from `CLAUDE.md`, or `.claude/rules/` | 3.2 |
+| A repeatable workflow the team runs on demand | Project command in `.claude/commands/` | 3.3 |
+| A workflow with verbose output that shouldn't clutter the session, or with restricted tools | Skill with `context: fork` and `allowed-tools` | 3.4 |
+| A tool integration everyone needs | Project `.mcp.json`, credentials by env var | 2.5 |
+
+When a team member's Claude "ignores the conventions", the first thing to check is where the conventions live. If they're in the lead developer's `~/.claude/CLAUDE.md`, they never reach anyone else. Run `/memory` to see which files are loaded (Lesson 3.1).
+
+### Choosing how to run a task
+
+| Task | Approach | Lesson |
+|---|---|---|
+| Single-file fix with a clear stack trace | Direct execution | 3.6 |
+| Migration touching 40+ files, or several valid designs | Plan mode first, then execute the plan | 3.6 |
+| A discovery phase that will produce lots of output | Explore subagent, which returns a summary | 3.6 |
+| A transformation that prose keeps getting wrong | 2–3 concrete input/output examples | 3.7 |
+| New behavior with clear expected results | Tests first, then iterate on failures | 3.7 |
+| Unfamiliar domain, unclear requirements | Interview pattern: have Claude ask questions first | 3.7 |
+| Several bugs whose fixes interact | One detailed message covering all of them | 3.7 |
+| Several independent bugs | Fix them one at a time | 3.7 |
+
+Plan mode isn't "safer, so always use it". It costs time, and for a one-line fix with an obvious cause it adds nothing. The signal for plan mode is complexity that's **already known**: many files, architectural choices, several reasonable approaches.
+
+### Keeping long sessions healthy
+
+A long session exploring a legacy codebase slowly degrades. The tell-tale sign is that Claude starts describing "typical patterns" instead of the specific classes it found an hour ago, and its answers stop agreeing with each other (Lesson 5.5). The fixes:
+
+- **Scratchpad file.** Have Claude record key findings (class names, file paths, call chains) in a file such as `notes/billing-map.md`, and refer back to it for later questions.
+- **Delegate discovery.** Send verbose questions ("find every caller of `reconcile()`") to a subagent that returns a summary, so the raw output never enters the main session.
+- **`/compact`** when the context is full of discovery output, ideally with instructions on what to keep.
+- **Summarize between phases.** Before starting the next phase, write down what the last one established and start from that.
+
+Across days, choose between resuming and starting fresh (Lesson 1.9):
+
+- **Resume** a named session (`--resume billing-perf`) when most of its context still holds. If files changed since, **tell it which ones** so it re-reads those rather than re-exploring everything.
+- **Start fresh with a structured summary** when much of the earlier tool output is stale, for example after a large merge.
+
+## Failure clinic
+
+| Symptom in the stem | Root cause | Fix | Lesson |
+|---|---|---|---|
+| A new teammate's Claude ignores team conventions | Conventions in someone's user-level file | Move them to project `CLAUDE.md` | 3.1 |
+| `/deploy-check` works for one developer only | Command in `~/.claude/commands/` | Move it to `.claude/commands/` | 3.3 |
+| Test conventions applied inconsistently to test files across the repo | Conventions in one folder's `CLAUDE.md` or buried in root | Rule file with `paths: ["**/*.test.*"]` | 3.5 |
+| A workflow floods the session with intermediate output | Runs in the main context | Skill with `context: fork` | 3.4 |
+| A library migration needed rework halfway through | Started with direct execution | Plan mode first, then execute | 3.6 |
+| Claude keeps misreading a data transformation | Prose-only description | Concrete input/output examples | 3.7 |
+| Late in a session, answers get generic and inconsistent | Context degradation | Scratchpad file, subagents, `/compact` | 5.5 |
+| A resumed session reasons about code that's since changed | Stale tool results | Tell it which files changed, or start fresh with a summary | 1.9 |
+
+## Distractor patterns
+
+- **"Use plan mode for everything."** Plan mode is for known complexity, not for a clear one-file fix.
+- **"Start in direct execution and switch to plan mode if it gets complicated,"** when the stem already says the task touches dozens of files.
+- **Configuration mechanisms that don't exist**, such as a `.claude/config.json` with a `commands` array. Commands are files in `.claude/commands/`.
+- **"Tell each developer to copy the file to their home directory."** It works until the copies drift. Shared standards belong in the repository.
+- **"Put everything in the root `CLAUDE.md` and let Claude work out which section applies."** That relies on inference; path rules match deterministically.
+- **"Switch to a model with a bigger context window"** for context degradation. Organization fixes it, not size.
+
+## How this shows up on the exam
+
+- **"Available to everyone who clones the repo"** → a project-scoped file under `.claude/` or the project `CLAUDE.md`.
+- **"Only for me"** → `~/.claude/`.
+- **"Conventions for files matching a pattern, wherever they are"** → `.claude/rules/` with `paths`.
+- **"Isolated, doesn't clutter the conversation"** → a skill with `context: fork`, or a subagent.
+- **"Architectural, many files, several approaches"** → plan mode. **"Clear, single-file"** → direct execution.
+- **"Generic answers late in a long session"** → scratchpad files, subagent delegation, `/compact`.
+
+<KeyTakeaways>
+
+- Decide where an instruction lives by asking **who needs it and when**: user, project, directory, path rule, command or skill.
+- Shared standards and commands go **in the repository** so every developer gets them; personal ones go in `~/.claude/`.
+- Use **plan mode** for known complexity and **direct execution** for clear, well-scoped changes. Use the **Explore** subagent for verbose discovery.
+- Iterate with **concrete examples**, **tests first**, or the **interview pattern**, and batch fixes only when they interact.
+- Counter degradation in long sessions with **scratchpad files**, **subagent delegation** and **`/compact`**, and resume only when earlier context is still valid.
+
+</KeyTakeaways>

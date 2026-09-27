@@ -1,0 +1,145 @@
+## How the capstones work
+
+Each Module 6 lesson takes one of the six official exam scenarios and walks through it end to end, pulling together the lessons from Modules 1–5 that it draws on. On exam day you'll see four of these six scenarios, each framing a set of questions. The questions rarely test one fact in isolation. They describe a symptom in a running system and ask for the most effective fix, so you need to know how the pieces fit together.
+
+Each capstone follows the same shape:
+
+1. **The system**: what's being built and which domains it draws on.
+2. **Reference architecture**: a sensible design, with each decision linked to the lesson that covers it.
+3. **Failure clinic**: symptoms you're likely to see in a question stem, their root causes, and the fix.
+4. **Distractor patterns**: the wrong answers that keep coming back in this scenario.
+
+The quiz mixes domains the way the exam does, and the bonus build combines several earlier exercises into one working system.
+
+## The system
+
+You're building a **customer support resolution agent** with the Claude Agent SDK. It handles ambiguous requests such as returns, billing disputes and account problems. It reaches the backend through custom MCP tools: `get_customer`, `lookup_order`, `process_refund` and `escalate_to_human`. The target is **80%+ first-contact resolution**, while still escalating the cases that need a person.
+
+The primary domains are **Agentic Architecture** (Domain 1), **Tool Design & MCP** (Domain 2) and **Context Management & Reliability** (Domain 5). The tension that runs through the whole scenario is *resolve more* versus *escalate correctly*. Most questions are about getting one of them right without breaking the other.
+
+## Reference architecture
+
+```text
+Customer message
+      |
+      v
++-------------------------------------------------------------+
+| Agent loop (Agent SDK)                           Lesson 1.1 |
+|  system prompt: escalation criteria + few-shot     5.3, 4.2 |
+|  case facts block (outside summarized history)          5.1 |
++-------------------------------------------------------------+
+      | tool calls                           ^ tool results
+      v                                      |
++----------------------------+  +-----------------------------+
+|  PreToolUse hooks          |  |  PostToolUse hooks          |
+|   identity gate       1.6  |  |   trim to key fields   5.2  |
+|   refund limit        1.7  |  |   normalize formats    1.7  |
++----------------------------+  +-----------------------------+
+      |                                      ^
+      v                                      |
++-------------------------------------------------------------+
+| MCP server (custom)                         Lessons 2.1-2.5 |
+|  get_customer     lookup_order                              |
+|  process_refund   escalate_to_human                         |
+|  detailed descriptions, structured errors, env-var creds    |
++-------------------------------------------------------------+
+```
+
+Walk through it one layer at a time.
+
+### The loop
+
+The agent runs the standard loop from Lesson 1.1: send the conversation, and if `stop_reason` is `"tool_use"`, run the tools, append each `tool_result` and loop again. Stop when `stop_reason` is `"end_turn"`. Don't end the loop by parsing the text for phrases like "I've resolved your issue", and don't use an arbitrary iteration cap as the main stopping rule.
+
+### Tools and their descriptions
+
+Four tools with overlapping inputs (a customer might give a name, an email, an order number or a charge ID) is exactly where tool selection goes wrong. Each description should say what the tool does, what inputs it accepts, what it returns, and when to use a neighboring tool instead (Lesson 2.1). For example, `lookup_order` should say it takes an order number like `ORD-48213` and **requires a verified customer ID**, and that questions about the person rather than an order belong to `get_customer`.
+
+When tools fail, they return structured errors, not "Operation failed" (Lesson 2.2):
+
+```json
+{
+  "isError": true,
+  "errorCategory": "business",
+  "isRetryable": false,
+  "message": "ORD-48213 delivered 2026-07-02; 30-day window closed.",
+  "customerMessage": "This order is past our 30-day return window."
+}
+```
+
+A `transient` error (payment service timeout) is retryable. A `business` error (return window expired) isn't, and the agent should explain it to the customer or escalate if the policy has a gap. A lookup that succeeds with **no matching orders** is not an error at all; it's a valid empty result.
+
+The MCP server lives in the project's `.mcp.json` with credentials passed by environment-variable expansion such as `${SUPPORT_API_TOKEN}`, never hard-coded (Lesson 2.5).
+
+### Hooks: where rules become guarantees
+
+Two business rules can't be left to the prompt, because a prompt-only rule has a non-zero failure rate and these failures cost money:
+
+- **Identity before money.** A PreToolUse gate blocks `lookup_order` and `process_refund` until `get_customer` has returned a verified customer ID for this session (Lesson 1.6).
+- **Refund limit.** A PreToolUse hook denies any `process_refund` over the approval threshold (say $500) and tells the agent to route the case to `escalate_to_human` instead (Lesson 1.7).
+
+PostToolUse hooks handle the other direction. They normalize heterogeneous formats (Unix timestamps from billing, ISO 8601 from orders, numeric status codes) and trim each order lookup to the handful of fields that matter before the result enters context (Lessons 1.7 and 5.2).
+
+### Context over long conversations
+
+Support conversations run long, and customers raise several issues at once. The agent keeps a **case facts block**: order IDs, amounts, dates, statuses and what the customer was promised. It's rebuilt each turn and kept outside any summarized history, so "the $86.40 double charge on the 14th" never becomes "a billing issue" (Lesson 5.1).
+
+A multi-concern message ("my blender arrived cracked, and I was also charged twice for it") is decomposed into separate items. Each is investigated with the shared case facts, then the agent writes one unified reply (Lesson 1.6).
+
+### Escalation
+
+The system prompt defines **explicit escalation criteria with a few examples** of each side of the line (Lessons 5.3 and 4.2):
+
+| Escalate | Resolve |
+|---|---|
+| The customer asks for a human (honor it right away, no investigation first) | Standard damage replacement with photo evidence |
+| Policy is silent or ambiguous (competitor price match when policy covers only your own site) | Refund within the window and under the limit |
+| The agent can't make meaningful progress | A frustrated customer with a straightforward fix (acknowledge it, offer the fix, escalate if they ask again) |
+| Refund above the limit (enforced by the hook) | Duplicate charge confirmed by billing |
+
+If `get_customer` returns several matches for "Sam Rivera", the agent asks for another identifier such as an email or order number. It doesn't pick the most recent account.
+
+When the agent escalates, it calls `escalate_to_human` with a **structured handoff**: customer ID, the issue, root cause, what was tried, amount involved and a recommended action. The human agent usually can't see the transcript, so the handoff has to stand on its own (Lesson 1.6).
+
+## Failure clinic
+
+| Symptom in the stem | Root cause | Fix | Lesson |
+|---|---|---|---|
+| Refunds occasionally go to the wrong account | Prompt-only ordering rule | Programmatic prerequisite gate on verified ID | 1.6 |
+| A refund over the limit went through | Limit lives only in the system prompt | PreToolUse hook that blocks and redirects to escalation | 1.7 |
+| Agent picks the wrong one of two similar tools | Thin descriptions | Expand descriptions with inputs, examples and boundaries | 2.1 |
+| Agent retries a policy violation three times | Generic error with no category | Structured error: `business`, `isRetryable: false`, customer message | 2.2 |
+| Late in a long chat the agent quotes the wrong amount | Summaries blurred the numbers | Persistent case facts block | 5.1 |
+| Context fills up after a few order lookups | 40-field results kept verbatim | Trim to relevant fields in a PostToolUse hook | 5.2 |
+| Easy cases escalated, hard exceptions attempted | Unclear decision boundary | Explicit criteria plus few-shot examples | 5.3 |
+| Humans re-ask the customer everything after handoff | Handoff was "customer needs help" | Structured handoff summary | 1.6 |
+| Agent refunds the wrong "Sam Rivera" | Heuristic pick among matches | Ask for another identifier | 5.3 |
+
+## Distractor patterns
+
+These wrong answers show up again and again in this scenario:
+
+- **"Strengthen the system prompt"** when the rule involves money or identity. Prompts guide, hooks guarantee.
+- **Self-reported confidence** ("route to a human when the agent's confidence is below 7"). The model is often confidently wrong on exactly the hard cases.
+- **Sentiment-based escalation.** Frustration doesn't measure complexity. An angry customer with a simple refund should get the refund.
+- **A separate classifier or routing model** as the *first* step, before prompt and description fixes have been tried. It's over-engineered for the problem.
+- **Bigger context window** for a context problem. Lost details come from summarization and position effects, not from running out of room.
+- **Trying to resolve before honoring a request for a human.** When the customer explicitly asks, escalate.
+
+## How this shows up on the exam
+
+- A question that mentions **money, identity or compliance** usually wants a **deterministic control**: a hook or prerequisite gate.
+- A question about **choosing the wrong tool** usually wants **better descriptions** first.
+- A question about **escalation calibration** wants **explicit criteria with few-shot examples**, not confidence scores, sentiment or a new model.
+- A question about **long conversations** wants **case facts** and **trimmed tool results**.
+- A question about **handoffs** wants a **structured summary** that stands on its own.
+
+<KeyTakeaways>
+
+- The scenario trades **first-contact resolution** against **correct escalation**. Most questions fix one without breaking the other.
+- Enforce identity checks and refund limits with **hooks and prerequisite gates**, not prompt wording.
+- Differentiate the four tools with **detailed descriptions**, and return **structured errors** that separate transient, validation, business and permission failures.
+- Keep a **case facts block** and **trim tool results** so long, multi-issue conversations stay accurate.
+- Escalate on **explicit requests, policy gaps and lack of progress**, defined with criteria and examples, and hand off with a **structured summary**.
+
+</KeyTakeaways>
