@@ -101,7 +101,7 @@ export function Quiz({ lessonId, questions }: { lessonId: string; questions: Qui
                   {q.type === "single" ? "Select 1" : `Select ${q.correct.length}`}
                 </span>
               </div>
-              {q.scenario && <p className="mt-3 text-sm italic text-muted">{q.scenario}</p>}
+              {q.scenario && <p className="mt-3 text-sm leading-relaxed">{q.scenario}</p>}
               <p className="mt-2 font-medium">{q.prompt}</p>
 
               <div className="mt-4 space-y-2">
