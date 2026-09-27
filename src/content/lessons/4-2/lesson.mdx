@@ -1,0 +1,103 @@
+## When instructions aren't enough
+
+Lesson 4.1 showed that explicit criteria beat vague ones. But some things are hard to pin down in words, however carefully you write them: the exact shape of a useful finding, or where the line falls between two reasonable choices. You can add paragraph after paragraph and still get inconsistent results.
+
+That's when to reach for **few-shot examples**: a handful of worked examples in the prompt showing the input, the right output, and often the reasoning. Task Statement 4.2 calls them **the most effective technique for consistently formatted, actionable output when detailed instructions alone produce inconsistent results.** This lesson covers few-shot for **judgment and format**; Lesson 4.3 covers few-shot for **extraction**.
+
+## Few-shot for format
+
+Suppose review findings come back in a different shape every run: sometimes a paragraph, sometimes bullets, sometimes without a location, sometimes without a fix. More instructions ("always include the file, line, severity, and a fix") help a little. Examples help a lot:
+
+```text
+Example finding:
+  location:  src/orders/refund.ts:42
+  issue:     Refund amount isn't checked against the original
+             charge, so a refund can exceed what was paid.
+  severity:  major
+  fix:       Clamp to charge.amount - charge.refunded, and
+             reject if the result is <= 0.
+
+Example finding:
+  location:  src/auth/session.ts:17
+  issue:     Session token compared with ==, allowing a timing
+             attack.
+  severity:  critical
+  fix:       Use crypto.timingSafeEqual on equal-length buffers.
+```
+
+Two examples show the four fields, their order, the level of detail in `issue`, and that `fix` is concrete and actionable. The model copies the pattern far more reliably than it follows a description of the pattern.
+
+## Few-shot for ambiguous cases
+
+The bigger win is teaching **judgment in the gray areas**. The guide's examples:
+
+- **Tool selection for ambiguous requests.** "Can you check on order 5521?" Is that `get_order_status` or `get_shipment_tracking`? Different agents guess differently.
+- **Branch-level test coverage gaps.** Is a missing test for an `else` branch worth reporting? Sometimes it is (the branch handles refunds), and sometimes it isn't (the branch logs and returns).
+
+For cases like these, the effective pattern is **2–4 targeted examples that show the reasoning for why one action was chosen over plausible alternatives**:
+
+```text
+Request: "Can you check on order 5521?"
+Considered: get_order_status, get_shipment_tracking
+Chose: get_order_status
+Why: "check on" with no mention of delivery is a general status
+question. Order status already includes the shipping state and
+links to tracking. Tracking alone would miss a cancelled or
+unpaid order.
+
+Request: "Where's my package for order 5521?"
+Considered: get_order_status, get_shipment_tracking
+Chose: get_shipment_tracking
+Why: "where's my package" asks about physical location, which
+only tracking returns. The order is already known to be shipped
+if the customer has a package to ask about.
+```
+
+The reasoning is the important part. Without it, the model learns to match surface features: "check on" goes to status. With it, the model learns **the principle**: general questions go to the broader tool, and location questions go to tracking.
+
+## Generalization, not a lookup table
+
+That's the property the guide stresses: **few-shot examples let the model generalize judgment to novel patterns rather than matching only pre-specified cases.** You can't write a rule for every request phrasing or every code pattern. A few examples with good reasoning teach the underlying distinction, and the model applies it to inputs that look nothing like the examples.
+
+This is also why examples should be **targeted**: chosen to sit at the boundaries where judgment is hard, not five variations of the easy case.
+
+## Reducing false positives with contrast pairs
+
+For review tasks, few-shot examples are a strong companion to Lesson 4.1's explicit criteria. Include pairs that **distinguish acceptable patterns from genuine issues**:
+
+```text
+NOT an issue: `catch (e) { logger.warn(e); return fallback; }`
+in a cache read. Swallowing the error is intended: a cache miss
+must never fail the request.
+
+IS an issue: `catch (e) { return null; }` in chargeCard(). The
+caller treats null as "no charge needed", so a payment failure
+silently becomes a free order.
+```
+
+The two snippets look alike on the surface (a caught error that isn't re-thrown), but the examples show that **context** decides whether it's a problem. That teaches a transferable judgment instead of a blanket rule like "flag every swallowed error," which would flood reviews with false positives.
+
+## Designing good examples
+
+- **2–4 examples** is usually the sweet spot. One example gets over-copied, and a dozen bloat the prompt and can narrow behavior.
+- **Aim at the boundary.** Pick the cases where a reasonable model or person would go wrong.
+- **Show the reasoning**, especially the rejected alternative and why it lost.
+- **Vary the surface.** Different files, phrasings, and lengths, so the model doesn't latch onto an incidental feature.
+- **Keep format identical across examples** when format consistency is the goal.
+
+## How this shows up on the exam
+
+- **"Detailed instructions still give inconsistent format"** → few-shot examples of the exact output format (location, issue, severity, suggested fix).
+- **"Inconsistent choices on ambiguous requests"** → 2–4 examples showing **why** one action was chosen over plausible alternatives.
+- **"Too many false positives on patterns that are fine here"** → examples contrasting acceptable patterns with genuine issues.
+- **"Must handle cases we didn't list"** → few-shot examples with reasoning **generalize**; exhaustive rules don't.
+
+<KeyTakeaways>
+
+- **Few-shot examples** are the most effective way to get consistent, actionable output when instructions alone are inconsistent.
+- Use **2–4 targeted examples** for ambiguous cases, showing the **reasoning** for choosing one action over plausible alternatives.
+- Examples with reasoning let the model **generalize** to novel cases instead of matching only listed ones.
+- Show the exact output **format** (location, issue, severity, suggested fix) to get it consistently.
+- **Contrast pairs** (acceptable pattern vs genuine issue) reduce false positives while keeping the judgment general.
+
+</KeyTakeaways>

@@ -1,0 +1,109 @@
+## Why "just return JSON" isn't enough
+
+The simplest way to get structured data from Claude is to ask for it: "Return the result as JSON with these fields." That works most of the time. In a pipeline that processes 50,000 documents, "most of the time" means hundreds of failures: a trailing comma, an unescaped quote, a stray sentence before the opening brace, or a field renamed from `invoice_date` to `date`. Each one breaks your parser.
+
+Task Statement 4.3 names the reliable approach: **tool use with a JSON schema**. It's the most reliable way to get **guaranteed schema-compliant structured output**, and it **eliminates JSON syntax errors**.
+
+## The pattern: a tool whose input is your data
+
+You define a "tool" that you never actually run. Its `input_schema` is the shape of the data you want. When Claude "calls" it, the arguments *are* the extraction:
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+
+extract_invoice = {
+    "name": "extract_invoice",
+    "description": (
+        "Record the fields of one supplier invoice. Use null "
+        "for any field the invoice does not contain."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "vendor": {"type": "string"},
+            "invoice_number": {"type": "string"},
+            "invoice_date": {
+                "type": ["string", "null"],
+                "description": "ISO 8601 date, YYYY-MM-DD",
+            },
+            "currency": {"type": "string", "enum": [
+                "USD", "EUR", "GBP", "other",
+            ]},
+            "total": {"type": "number"},
+        },
+        "required": ["vendor", "invoice_number",
+                     "invoice_date", "currency", "total"],
+    },
+}
+
+response = client.messages.create(
+    model="claude-opus-5",
+    max_tokens=2048,
+    tools=[extract_invoice],
+    tool_choice={"type": "tool", "name": "extract_invoice"},
+    messages=[{"role": "user", "content": invoice_text}],
+)
+
+block = next(b for b in response.content
+             if b.type == "tool_use")
+invoice = block.input   # already a parsed dict
+```
+
+Two things to notice:
+
+- **You read `block.input`**, the arguments of the `tool_use` block. It's already parsed into a dictionary. There's no JSON string for you to parse, so there's no parse error to catch.
+- **`tool_choice`** controls whether a call is guaranteed. Lesson 2.4 covered the options: `auto` may return text instead, `any` guarantees *some* tool call (the right choice when several extraction schemas exist and the document type is unknown), and forced selection guarantees *this* tool. For a single-schema extraction like this one, forcing the tool is simplest.
+
+## Syntax guaranteed, semantics not
+
+This is the most tested idea in this task statement. A schema-enforced tool call guarantees the output is **syntactically valid and shaped like the schema**. It does **not** guarantee the values are **correct**:
+
+| Error type | Example | Prevented by tool use + schema? |
+|---|---|---|
+| **Syntax** | Missing brace, trailing comma, text around the JSON | **Yes**, eliminated |
+| **Structural** | Missing required field, wrong type, value outside the enum | **Yes**, with strict schema enforcement |
+| **Semantic** | Line items that don't add up to the total; the ship-to address in the bill-to field; a date misread as MM/DD instead of DD/MM | **No** |
+
+A perfectly well-formed extraction can still say `"total": 4200` when the line items sum to 4,020. Semantic errors need their own checks: validation code, cross-field consistency checks, and retry loops (Lesson 4.6).
+
+<Callout type="note" title="Real-world note: strict tool use and structured outputs">
+On current models, add **`"strict": true`** to a tool definition to guarantee its arguments exactly match the schema: every required field present, correct types, enum values respected. Without it, a tool call is valid JSON that *usually* matches. For plain JSON responses without a tool, the API also offers **structured outputs** via `output_config.format` with a JSON schema. Both enforce structure, and neither checks meaning. Remember that some newer models reject forced `tool_choice` (Lesson 2.4); `strict` tools and structured outputs are the usual alternatives there.
+</Callout>
+
+## Pair the schema with normalization rules
+
+A schema says a field is a string. It doesn't say *which* string. Source documents write the same fact many ways: "3 May 2026," "05/03/26," "May 3rd." Without guidance, you get all of those formats back, each perfectly valid according to the schema.
+
+The guide's skill: **include format normalization rules in the prompt alongside the strict output schema.**
+
+```text
+Normalization rules:
+- Dates: output YYYY-MM-DD. If the day and month order is
+  ambiguous, use the vendor's country; if unknown, set
+  invoice_date to null.
+- Amounts: plain numbers, no currency symbols or thousands
+  separators. "1.234,50 EUR" -> 1234.50
+- Currency: ISO code; anything not listed -> "other".
+```
+
+Put the short, universal rules in the field descriptions (like "ISO 8601 date" above) and the fuller rules in the prompt. The schema guarantees the shape, and the rules make the values consistent.
+
+## How this shows up on the exam
+
+- **"JSON parse failures in the extraction pipeline"** → tool use with a JSON schema (strict), reading the `tool_use` input.
+- **"Well-formed output, but totals don't match line items"** → a semantic error; the schema can't catch it, so add validation.
+- **"Several schemas, unknown document type"** → `tool_choice: "any"`. **"This extraction must run first"** → forced tool selection.
+- **"Dates and amounts come back in mixed formats"** → normalization rules in the prompt alongside the schema.
+- Distractors: "ask for JSON in the prompt more firmly," regex repair of broken JSON, or assuming a schema guarantees correct values.
+
+<KeyTakeaways>
+
+- **Tool use with a JSON schema** is the most reliable way to get schema-compliant structured output. It **eliminates JSON syntax errors**.
+- Define an extraction tool whose `input_schema` is your data shape, and read the result from the **`tool_use` block's input**.
+- Choose `tool_choice` deliberately: `any` for unknown document types across several schemas, forced for a specific extraction.
+- Schemas prevent **syntax and structural** errors, **not semantic** ones such as sums that don't match or values in the wrong field.
+- Add **normalization rules** to the prompt so values are consistent, not just well-shaped.
+
+</KeyTakeaways>

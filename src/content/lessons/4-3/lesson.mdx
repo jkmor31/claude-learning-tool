@@ -1,0 +1,89 @@
+## Extraction meets messy documents
+
+Extraction means pulling structured fields out of unstructured documents: invoices, research papers, contracts, clinical notes. It works well on clean, consistent documents. Real collections aren't clean. The same fact shows up in different places, in different formats, sometimes informally, sometimes not at all.
+
+Two failure modes follow, and they're opposites:
+
+- **Hallucination**: the model fills a field with something plausible that isn't really in the document, or misreads an informal value.
+- **Empty or null extraction**: the model returns nothing for a field that *is* in the document, because it's somewhere or in a form the model didn't expect.
+
+Task Statement 4.2's extraction skills address both with the same tool as Lesson 4.2: **few-shot examples**, this time showing **correct extraction from varied document structures and formats**.
+
+## Varied structures: where the field lives
+
+Take a pipeline that extracts from research papers: the methodology, the sample size, and the sources cited. Papers disagree on where these live:
+
+| Field | Structure A | Structure B |
+|---|---|---|
+| Sources | A **bibliography** section at the end | **Inline citations** in the text, like (Nguyen 2024), with no bibliography |
+| Methodology | A dedicated **Methods section** | **Embedded** in the introduction or results ("we surveyed 412 clinicians...") |
+
+An instruction like "extract the methodology" works on structure A. On structure B, with no section to find, the model often returns `null`, or grabs the wrong paragraph. Describing every structure in prose is hard. **Showing** each structure is easy:
+
+```text
+Example 1 (methods in a dedicated section):
+  Document: "... 2. Methods. We conducted semi-structured
+  interviews with 38 nurses across 4 hospitals ..."
+  Output: {"methodology": "semi-structured interviews",
+           "sample_size": 38}
+
+Example 2 (methods embedded, no Methods heading):
+  Document: "... To test this, we surveyed 412 clinicians
+  in March 2025; responses were analyzed with ..."
+  Output: {"methodology": "survey", "sample_size": 412}
+```
+
+Once the model has seen that methodology can hide in a sentence of the results, it looks for it there, and empty extractions of that field drop sharply.
+
+## Informal values: normalize, don't guess
+
+Informal formatting is the other trap. A recipe-extraction pipeline sees "a pinch of salt," "2-3 cloves garlic," "one 14-oz can," and "a handful of basil." A field like `quantity` invites the model to invent precision: turning "a pinch" into "0.5 g" is a hallucination, not an extraction.
+
+Few-shot examples set the rules for these cases:
+
+```text
+"2-3 cloves garlic"   -> {"quantity_min": 2, "quantity_max": 3,
+                          "unit": "clove", "item": "garlic"}
+"a pinch of salt"     -> {"quantity_min": null,
+                          "quantity_max": null,
+                          "unit": "pinch", "item": "salt"}
+"one 14-oz can beans" -> {"quantity_min": 1, "quantity_max": 1,
+                          "unit": "can (14 oz)", "item": "beans"}
+```
+
+The examples show that a range stays a range, an informal amount stays informal (with `null` for the missing number rather than an invented one), and a package size is kept rather than converted. That's the guide's point: **few-shot examples reduce hallucination in extraction**, especially with informal measurements and varied structures.
+
+## Required fields that come back empty
+
+A specific symptom the guide calls out: **required fields coming back empty or null** even though the information is in the document. Usually the field appears in a format the model didn't recognize: a date written "the third of May," an invoice total labeled "Amount due" instead of "Total," an author list in a footer.
+
+The fix is examples showing **correct extraction from documents with those varied formats**, with one example per variant that's actually failing. Look at the failures first, group them by *why* the field was missed, and write an example for each group.
+
+<Callout type="exam" title="Absent vs hard to find">
+Few-shot examples help when the information **is in the document** but in an unexpected place or format. They don't help when it's **genuinely absent**. That's a schema problem: make the field nullable so the model isn't pushed to invent a value (Lesson 4.5), and don't expect retries to conjure it (Lesson 4.6). Exam questions often hinge on which of these two situations you're in.
+</Callout>
+
+## Designing extraction examples
+
+- **Cover the structural variants you actually see**, such as bibliography vs inline, section vs embedded. Sample real documents, don't imagine them.
+- **Include at least one example with a legitimately missing field**, showing `null`, so examples don't teach "always fill everything."
+- **Pair examples with normalization rules** (Lesson 4.4 covers these alongside schemas): "dates as YYYY-MM-DD," "keep ranges as min/max."
+- **Keep examples short.** Show the relevant excerpt, not the whole document.
+- **Use real failure cases** as the source for new examples, then re-test on documents that weren't used as examples.
+
+## How this shows up on the exam
+
+- **"Extraction hallucinates values for informal measurements"** → few-shot examples showing how informal values are extracted, including `null` where no number exists.
+- **"Methodology or citations come back empty for some papers"** → examples covering the varied structures (embedded methods, inline citations).
+- **"Required fields return null even though the data is in the document"** → examples showing correct extraction from the varied formats that are failing.
+- **"The data isn't in the document at all"** → not a few-shot problem; nullable fields, not examples.
+
+<KeyTakeaways>
+
+- Few-shot examples **reduce hallucination** in extraction, especially with **informal measurements** and **varied document structures**.
+- Show correct extraction for each **structural variant**: inline citations vs bibliographies, methodology sections vs embedded details.
+- When required fields come back **empty despite being present**, add examples of the **formats that are failing**.
+- Include an example where a field is **legitimately absent**, so the model learns `null` rather than invention.
+- Examples fix "present but hard to find," not "absent." Absent data needs a nullable schema.
+
+</KeyTakeaways>

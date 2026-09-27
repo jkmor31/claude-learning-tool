@@ -1,0 +1,91 @@
+## Precision is a design problem
+
+Domain 4 is 20% of the exam, and it's about getting **reliable** output from Claude: output that's accurate, consistently shaped, and trustworthy enough to automate. It starts with the most common failure in review and classification systems: **too many false positives**.
+
+A code-review bot that flags 20 things per PR, of which 6 matter, isn't "catching more." It's teaching developers to ignore it. Task Statement 4.1 says the fix isn't asking the model to be more careful. It's telling the model **exactly what to report**.
+
+## Vague instructions vs explicit criteria
+
+Compare two instructions for a review that checks code comments:
+
+| Vague | Explicit |
+|---|---|
+| "Check that comments are accurate." | "Flag a comment **only when the behavior it claims contradicts what the code actually does**, for example a comment saying 'returns null on failure' above a function that throws. Don't flag comments that are merely terse, outdated in tone, or missing." |
+
+The vague version invites the model to flag anything it might quibble with: wording, completeness, style, TODOs. Each is a defensible reading of "accurate." The explicit version defines the category precisely, gives an example, and says what's out of scope. There's much less room for interpretation, so much less noise.
+
+That's the core skill: **write criteria that define which issues to report and which to skip.**
+
+```text
+Report:
+- Bugs: logic errors, off-by-one, null/undefined access,
+  unhandled promise rejections, race conditions.
+- Security: injection, missing authz checks, secrets in code,
+  unsafe deserialization.
+
+Do NOT report:
+- Minor style (naming, formatting, import order); the linter
+  handles these.
+- Patterns that match the surrounding code's local
+  conventions, even if you'd write them differently.
+- Missing tests or docs (a separate check covers these).
+```
+
+## Why "be conservative" doesn't work
+
+The tempting shortcut is a general instruction: *"Be conservative."* *"Only report high-confidence findings."* *"Avoid false positives."* The guide is clear that these **fail to improve precision** compared with specific categorical criteria.
+
+The reason: they don't change what the model thinks counts as an issue. If the model believes an unconventional variable name is a problem, it's already "confident" about it. "Only report high-confidence findings" just filters on a self-assessment that isn't well calibrated to *your* definition of a real problem. The false positives come from a **mismatch in categories**, not a lack of confidence, so only defining the categories fixes them.
+
+<Callout type="warning" title="Anti-pattern: confidence-based filtering">
+Asking the model to rate each finding's confidence and dropping those below a threshold feels rigorous, but it filters on the wrong axis. A style nit reported "with high confidence" is still a style nit. Define **which categories** to report; don't ask the model to judge how sure it is.
+</Callout>
+
+## False positives poison the good findings
+
+Precision isn't only about the noisy category. The guide highlights a trust effect: **high false-positive categories undermine confidence in the accurate categories.**
+
+Suppose a review bot is excellent at security findings (90% valid) but terrible at "performance suggestions" (15% valid). Developers don't evaluate each category separately. They experience one bot that's "usually wrong," and they start dismissing *everything* it posts, including the real SQL injection.
+
+## Restoring trust: temporarily disable the noisy category
+
+When one category is generating most of the false positives, a practical move is to **temporarily disable that category** while you improve its prompt. Stop reporting performance suggestions entirely, keep the reliable bug and security findings flowing, and let developers relearn that the bot's comments are worth reading. Re-enable the category once its criteria are tight enough, verified against real PRs, to meet the same bar.
+
+This is better than both extremes:
+
+- **Keeping the noisy category** keeps eroding trust in everything.
+- **Turning the bot off** throws away the categories that were working.
+
+## Consistent severity with concrete examples
+
+Even with the right categories, "severity" drifts. One run calls a missing null check "critical," the next calls it "minor." The fix is to **define each severity level explicitly, with concrete code examples**:
+
+```text
+critical: exploitable or data-destroying in production.
+  e.g. db.query("SELECT * FROM users WHERE id=" + req.id)
+
+major: incorrect behavior users will hit, no security impact.
+  e.g. items.slice(1) when the first item must be included
+
+minor: real but low-impact defect.
+  e.g. an error message naming the wrong field
+```
+
+Examples anchor each level to something recognizable, so classification stays consistent across runs, reviewers, and PRs. (Lesson 4.2 goes deeper on using examples to teach judgment.)
+
+## How this shows up on the exam
+
+- **"Too many false positives"** → explicit report/skip criteria per category, not "be conservative" or "only high confidence."
+- **"Developers ignore the bot, even its correct findings"** → high false-positive categories are eroding trust; tighten or temporarily disable those categories.
+- **"Severity is inconsistent between runs"** → explicit severity definitions with concrete code examples for each level.
+- Distractors: confidence thresholds, self-rated certainty, "be more careful," a bigger model, or turning the whole system off.
+
+<KeyTakeaways>
+
+- **Explicit criteria beat vague instructions**: define exactly which issues to report (bugs, security) and which to skip (minor style, local patterns).
+- General instructions like **"be conservative"** or **"only high-confidence findings"** don't improve precision; they don't change what the model counts as an issue.
+- **High false-positive categories undermine trust in accurate ones.**
+- **Temporarily disable** a noisy category while you improve its prompt, keeping the reliable categories running.
+- Define **severity levels with concrete code examples** for consistent classification.
+
+</KeyTakeaways>
