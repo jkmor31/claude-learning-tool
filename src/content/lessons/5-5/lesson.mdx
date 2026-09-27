@@ -1,3 +1,6 @@
+import { PhaseSummaryHandoff } from "./diagrams/PhaseSummaryHandoff";
+import { ManifestResume } from "./diagrams/ManifestResume";
+
 ## The long exploration problem
 
 Understanding a large codebase takes many steps: find the entry points, trace a flow, map the dependencies, check the tests, then answer a dozen follow-up questions. Done in one long session, this runs into a predictable problem: **the context fills up, and the quality of the agent's answers quietly degrades.** Task Statement 5.4 covers how to spot that and design around it.
@@ -44,13 +47,9 @@ Delegate **specific investigation questions** to subagents, such as **"find all 
 
 Multi-phase work (map the architecture, then trace flows, then plan changes) should **summarize the key findings of one phase before spawning subagents for the next**, and **inject that summary into their initial context**.
 
-```text
-Phase 1 (mapping) -> summary: modules, entry points, owners
-                         |
-                         v  injected into each Phase 2 prompt
-Phase 2 subagents: "Given this architecture summary, trace
-                    how X flows through Y"
-```
+<Figure caption="Phase 2 subagents start from a compact summary of Phase 1, not from its raw file reads.">
+  <PhaseSummaryHandoff />
+</Figure>
 
 Each phase starts from a compact, accurate base instead of rediscovering what the last phase already learned, and nobody has to carry Phase 1's raw file reads forward.
 
@@ -72,6 +71,10 @@ Long explorations can be interrupted by a crash, a timeout or a closed laptop. T
 ```
 
 On restart, the coordinator reads the manifest, skips the completed work, feeds each pending agent the relevant saved outputs, and continues. Without it, a crash at hour three means starting over, or worse, resuming a session whose context no longer matches reality (Lesson 1.9).
+
+<Figure caption="On resume, the coordinator reads the manifest, skips completed agents, and injects saved state into the pending ones.">
+  <ManifestResume />
+</Figure>
 
 ## How the pieces fit
 

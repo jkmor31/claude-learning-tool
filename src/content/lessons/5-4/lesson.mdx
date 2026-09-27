@@ -1,3 +1,6 @@
+import { EmptyVsFailed } from "./diagrams/EmptyVsFailed";
+import { LocalRecoveryThenPropagate } from "./diagrams/LocalRecoveryThenPropagate";
+
 ## Failures travel upward
 
 In a multi-agent system, a failure in one subagent rarely stays there. A search subagent can't reach a database; what the coordinator hears about it, and what the final report says, determines whether the system **recovers gracefully** or **quietly produces a wrong answer**. Lesson 2.2 covered errors at the **tool** level (`isError`, error categories). Task Statement 5.3 is about the next level up: how errors **propagate across agents**.
@@ -46,6 +49,10 @@ The most consequential distinction here:
 
 Mix them up and the damage is serious. If a timeout is reported as "no results," the final report will state that **no evidence exists**, when in fact nobody looked. The subagent's output must make the difference explicit, with a status for failures and a successful status with an empty result set for real empties.
 
+<Figure caption="A timeout marked as an empty success becomes a false claim of no evidence; a failure status keeps it a visible gap.">
+  <EmptyVsFailed />
+</Figure>
+
 ## Two anti-patterns at opposite ends
 
 <Callout type="warning" title="Silent suppression">
@@ -63,6 +70,10 @@ The right place is between them: **surface the failure with structure, keep the 
 Not every failure should reach the coordinator. A subagent that hits a **transient** error, such as one timeout or one rate-limit response, should **retry locally** (with backoff, a limited number of times) before reporting anything. The coordinator shouldn't be pulled into every network blip.
 
 The guide's rule: **subagents implement local recovery for transient failures, and only propagate errors they can't resolve**, including **what was attempted and any partial results**. The coordinator sees fewer errors, and each one it does see arrives with enough context to act on.
+
+<Figure caption="Transient failures stop at the subagent; only unresolved errors reach the coordinator, with enough context to choose a recovery.">
+  <LocalRecoveryThenPropagate />
+</Figure>
 
 ## Coverage annotations in the final output
 
