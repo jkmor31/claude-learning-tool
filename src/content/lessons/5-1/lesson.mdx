@@ -1,3 +1,6 @@
+import { FactsSurviveSummarization } from "./diagrams/FactsSurviveSummarization";
+import { MixedNarrativeVsIssueLayer } from "./diagrams/MixedNarrativeVsIssueLayer";
+
 ## Long conversations forget the details that matter
 
 Domain 5 (15% of the exam) is about **reliability**: keeping agents accurate as conversations get long, work gets handed off, and things go wrong. It starts with a problem every long-running support or research agent hits: **the conversation outgrows the context window, and the facts that matter most are the first to get blurred.**
@@ -57,6 +60,10 @@ The prompt now has three layers:
 
 Summarization can compress layer 2 as much as it likes; layer 1 is never touched by it. The code that maintains the facts block can be as simple as a small extraction step (Lesson 4.4) after each turn that updates the structured record.
 
+<Figure caption="Across rounds of summarization, the case facts block stays exact while the summarized history keeps losing detail.">
+  <FactsSurviveSummarization />
+</Figure>
+
 ## Multi-issue sessions: a separate context layer per issue
 
 Customers often raise several problems in one conversation: a late order, a double charge, and an address change. Mixing all of them in one narrative makes it easy to apply one issue's amount to another, or to lose track of which one is resolved. The guide's pattern: **extract structured issue data (order IDs, amounts, statuses) into a separate context layer.**
@@ -72,6 +79,10 @@ Customers often raise several problems in one conversation: a late order, a doub
 ```
 
 The agent can see at a glance what's open, and resolving one issue doesn't blur another.
+
+<Figure caption="One mixed narrative lets a double-charge amount bleed into another order; a separate entry per issue keeps them apart.">
+  <MixedNarrativeVsIssueLayer />
+</Figure>
 
 <Callout type="note" title="Real-world note: compaction">
 Claude Code and the Agent SDK **compact** long conversations automatically, and Claude Code offers `/compact`, which accepts instructions on what to keep. Compaction is a form of summarization, so the same risk applies. Anything that must survive exactly belongs in something compaction doesn't rewrite: a persistent facts block your code injects, a file the agent maintains, or `CLAUDE.md` for standing instructions.

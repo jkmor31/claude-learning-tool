@@ -1,3 +1,6 @@
+import { LostInTheMiddle } from "./diagrams/LostInTheMiddle";
+import { ToolResultTrim } from "./diagrams/ToolResultTrim";
+
 ## Not all context is equal
 
 Lesson 5.1 was about keeping the right facts **in** context. This lesson is about two quieter problems: **where** information sits in a long input affects whether it's used, and a lot of what fills context is **noise** that crowds out what matters. Both come from the rest of Task Statement 5.1.
@@ -27,6 +30,10 @@ You can't make the middle go away, but you can design around it. The guide's two
 
 The key findings sit where attention is strongest, and the headers turn the middle into labeled sections that the model (and any human reader) can navigate.
 
+<Figure caption="Reports 1, 2, 11, and 12 are reliably used; reports 5 through 8 are the ones most often missed.">
+  <LostInTheMiddle />
+</Figure>
+
 ## Tool results pile up
 
 Every tool result stays in the conversation, and tool results are often **far bigger than their useful content**. The guide's example: an order lookup returns **40+ fields**, of which only **5** matter for the current task. A return-processing conversation that looks up six orders carries 240 fields of warehouse codes, internal flags and audit timestamps, all consuming tokens and competing for attention with the handful of fields that decide the case.
@@ -49,6 +56,10 @@ Where to trim:
 - **In the tool itself**: return a task-specific view, or accept a `fields` parameter.
 - **In a PostToolUse hook** (Lesson 1.7): rewrite the result before the model sees it, when you don't control the tool.
 - **By role**: a returns agent and a fraud agent need different fields from the same lookup. Trim per role, not globally.
+
+<Figure caption="The same 43-field lookup is trimmed to a different, smaller set of fields for each role.">
+  <ToolResultTrim />
+</Figure>
 
 ## Handoffs between agents: structure over prose
 
