@@ -1,3 +1,6 @@
+import { BatchCorrelateResubmit } from "./diagrams/BatchCorrelateResubmit";
+import { BatchSlaTimeline } from "./diagrams/BatchSlaTimeline";
+
 ## Half price, if you can wait
 
 The **Message Batches API** lets you submit a large set of Messages API requests together and collect the results later. The trade, per Task Statement 4.5:
@@ -72,6 +75,10 @@ Some requests in a large batch will fail: a transient error, an expired request,
 - **Exceeded the context limit** → **chunk** the document into sections, and submit each chunk as its own request (`invoice-8841-part1`, `-part2`), then merge the results.
 - **Invalid request** → fix the request, such as a malformed parameter, before resubmitting.
 
+<Figure caption="Only the failed custom_ids loop back into the batch; the succeeded ones are never touched again.">
+  <BatchCorrelateResubmit />
+</Figure>
+
 ## Refine the prompt on a sample first
 
 At 50,000 documents, a prompt flaw is 50,000 bad results, and fixing it means paying for another full batch. The guide's advice: **refine the prompt on a sample set before batch-processing large volumes**, to maximize first-pass success and avoid costly resubmission.
@@ -87,15 +94,11 @@ A practical sequence:
 
 Suppose documents arrive continuously and the business promises results **within 30 hours** of arrival. Batch processing can take up to 24 hours. How often must you submit?
 
-```text
-SLA:                          30 h
-Worst-case batch processing: -24 h
-Time left before submission:   6 h
-Margin for collecting results,
-validation, and resubmitting
-failures:                     -2 h
-Submission window:             4 h
-```
+SLA (30 h) minus worst-case batch processing (24 h) leaves 6 hours; reserving 2 hours as margin for collecting results, validating, and resubmitting failures leaves a 4-hour submission window.
+
+<Figure caption="A 4-hour submission window keeps the worst-case 28 hours inside the 30-hour SLA, with margin to spare.">
+  <BatchSlaTimeline />
+</Figure>
 
 A document that arrives just after a submission waits up to the full window before it's submitted, then up to 24 hours in processing. With **4-hour windows**, its worst case is 4 + 24 = 28 hours, leaving margin inside the 30-hour SLA for handling failures. Submit a batch every 4 hours. That's the guide's example: **4-hour windows to guarantee a 30-hour SLA with 24-hour batch processing.**
 
