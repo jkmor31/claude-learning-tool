@@ -23,6 +23,12 @@ Study app for the Claude Certified Architect – Foundations exam (code CCAR-F).
 - Bonus builds accumulate in the learner's `ccarf-lab` repo (set up in lesson 0.1); each bonus adds to `exercises/<lesson-id>/`.
 - MDX: escape `{`, `}`, and `<` in prose (use inline code). Available components: `<Callout type="note|exam|warning" title?>`, `<KeyTakeaways>`.
 
+## Hosting
+
+The app is a static export (`output: "export"`) deployed to GitHub Pages under `/claude-learning-tool/` on every push to `main`. Don't add features that need a server: route handlers, server actions, middleware, cookies, `dynamicParams: true`, or `next/image` without `unoptimized`. Link internally with `next/link` so the base path is applied; never hard-code `/lessons/...` in plain `<a>` tags or `window.location`.
+
+Known quirk: a static export built on Windows writes prefetch files into nested `__next.*` folders instead of flat `__next.a.b.txt` names (Next 16.3 joins paths with `\` and only converts `/`), so previewing `out/` locally shows 404s for `__next.*.txt` requests. The deployed site is built on Linux in CI and is unaffected, and `npm run dev` is unaffected. Don't "fix" this in app code.
+
 ## Checks
 
 `npx tsc --noEmit`, `npm run lint`, `npm run build`. For UI changes, run the app and exercise the quiz in a browser.

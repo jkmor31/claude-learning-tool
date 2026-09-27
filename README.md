@@ -2,6 +2,8 @@
 
 A self-paced study app for the **Claude Certified Architect – Foundations** (CCAR-F) exam.
 
+**Use it online:** https://jkmor31.github.io/claude-learning-tool/
+
 > **Independent study aid. Not affiliated with, endorsed by, or sponsored by Anthropic.** "Claude" and "Anthropic" are trademarks of Anthropic, PBC. This app contains no actual exam content; all lessons and practice questions are original material based on the publicly available exam guide.
 
 ## What's inside
@@ -41,6 +43,14 @@ npm run dev
 ```
 
 Then open http://localhost:3000.
+
+To preview the production build, run `npm run build` then `npm start`. The build is a fully static site written to `out/`.
+
+## Deployment
+
+Every push to `main` builds the static site and publishes it to GitHub Pages via `.github/workflows/deploy.yml`. The workflow sets `PAGES_BASE_PATH` so the site works under `/claude-learning-tool/`.
+
+The app is a static export, so server-only Next.js features (route handlers, server actions, middleware, cookies, image optimization) aren't available.
 
 ## Official exam resources
 
