@@ -1,0 +1,101 @@
+## Skills: packaged workflows that load when needed
+
+A **skill** is a folder in `.claude/skills/` containing a `SKILL.md` file: instructions for a specific task, plus frontmatter that controls how the skill runs. Like a command, you can invoke it by name (`/analyze-deps`). Unlike `CLAUDE.md`, it **isn't loaded every session**. It loads when it's invoked. That makes skills the home for task-specific workflows that would otherwise bloat your always-loaded configuration.
+
+This is the second half of Task Statement 3.2.
+
+## Anatomy of a skill
+
+```text
+.claude/skills/
+  analyze-deps/
+    SKILL.md
+    report-template.md     supporting file (optional)
+```
+
+```markdown
+---
+name: analyze-deps
+description: Audit the dependency graph for unused, duplicated,
+  or outdated packages and summarize the findings.
+argument-hint: [package-path]
+context: fork
+allowed-tools: Read Grep Glob
+---
+
+Analyze dependencies for $ARGUMENTS (default: whole repo).
+
+1. Find every package.json with Glob.
+2. For each dependency, Grep for imports to confirm it's used.
+3. Flag duplicates across packages with different versions.
+4. Return a summary using report-template.md: at most
+   15 findings, most impactful first, each with a file path.
+```
+
+The body is the prompt. The frontmatter is where the three fields the exam names come in.
+
+## `context: fork`: keep the noise out of your session
+
+Some tasks produce a lot of output on the way to a small answer. A dependency audit reads dozens of `package.json` files and hundreds of search results, all to produce 15 findings. Run inline, all that intermediate material lands in your main conversation and stays there, crowding out what you were working on.
+
+**`context: fork`** runs the skill in an **isolated subagent context**. The subagent does the reading and searching in its own context window, and only its final result comes back to your session. It's Lesson 1.2's context isolation, applied to a skill.
+
+The guide names two kinds of work that benefit:
+
+- **Verbose output**, such as a codebase analysis or an audit across many files.
+- **Exploratory context**, such as brainstorming several alternative designs. You want the chosen direction in your session, not every discarded idea.
+
+Don't fork a skill whose whole point is to change your current conversation's state, like one that loads coding guidelines for the work you're about to do. A forked skill starts without your conversation history, so write its instructions as a self-contained task.
+
+## `allowed-tools`: limit what the skill can do
+
+**`allowed-tools`** lists the tools the skill uses. The guide's framing is to **restrict tool access during skill execution**. A skill meant to generate files might be limited to reading and writing, so it can't run destructive shell commands. An analysis skill might get only `Read`, `Grep`, and `Glob`. This is least privilege (Lesson 2.3), applied per skill.
+
+<Callout type="note" title="Real-world note: allowed-tools pre-approves">
+In current Claude Code, `allowed-tools` **pre-approves** the listed tools, so they run without permission prompts while the skill is active. It doesn't remove other tools. To actually take tools away during a skill, use the **`disallowed-tools`** field, or rely on your permission settings. On the exam, "restrict the skill's tools" → `allowed-tools`. In practice, pair it with `disallowed-tools` or deny rules when the restriction really matters.
+</Callout>
+
+## `argument-hint`: ask for what's required
+
+**`argument-hint`** tells developers what to pass. When someone invokes the skill without its required parameter, the hint shows them what's expected, like `[package-path]` or `[ticket-id] [branch]`, instead of the skill running with an empty `$ARGUMENTS` and producing something generic.
+
+## Other frontmatter worth knowing
+
+- **`description`** matters more for skills than for commands. Claude reads skill descriptions to decide when a skill is relevant, and can invoke the skill **on its own** when a request matches. A vague description means the skill never triggers, or triggers when it shouldn't (the same lesson as tool descriptions in 2.1).
+- **`disable-model-invocation: true`** makes a skill run only when a person types it. Use it for anything with side effects, like deploys.
+- **`agent`** picks the subagent type for a forked skill, such as the read-only `Explore` agent.
+
+## Personal variants: a different name
+
+Skills follow the same scoping as commands: `.claude/skills/` in the project is shared through version control, and **`~/.claude/skills/`** is personal. The guide's rule for customization: **create personal variants in `~/.claude/skills/` with different names**, so you don't affect teammates. If you want a stricter version of the team's `review` skill, make `review-strict` in your home directory. Don't edit the shared skill, and don't reuse its name.
+
+## Skills or CLAUDE.md?
+
+This is the judgment call the exam tests most:
+
+| | `CLAUDE.md` | Skill |
+|---|---|---|
+| Loaded | **Always**, every session | **On demand**, when invoked or judged relevant |
+| Holds | Universal standards: build commands, conventions, "always/never" rules | Task-specific workflows: audits, migrations, release steps |
+| Cost | Tokens in every session | Tokens only when used |
+
+A useful test: **would this instruction matter in almost every session?** Then it's `CLAUDE.md`. **Is it a procedure for one kind of task?** Then it's a skill. A 40-line "how to write a database migration" procedure in `CLAUDE.md` costs tokens in every session, including the 95% that never touch migrations. As a skill, it loads only for migration work.
+
+## How this shows up on the exam
+
+- **"Verbose or exploratory skill output is cluttering the main session"** → `context: fork`.
+- **"The skill should only be able to use certain tools"** → `allowed-tools` in its frontmatter.
+- **"Developers run the skill without the required parameter"** → `argument-hint`.
+- **"I want my own version of a team skill"** → a personal skill in `~/.claude/skills/` with a **different name**.
+- **"Where should this workflow live?"** → task-specific and on demand → skill. Universal and always relevant → `CLAUDE.md`.
+
+<KeyTakeaways>
+
+- A skill is `.claude/skills/<name>/SKILL.md`: frontmatter plus a prompt, loaded **on demand**.
+- **`context: fork`** runs the skill in an isolated subagent context, so verbose or exploratory output doesn't pollute the main conversation.
+- **`allowed-tools`** limits the skill's tools (exam framing). In current Claude Code it pre-approves them; use `disallowed-tools` to remove tools.
+- **`argument-hint`** tells developers which parameters to pass.
+- Personal variants go in **`~/.claude/skills/`** under **different names**.
+- **Skills** for task-specific workflows; **CLAUDE.md** for always-loaded universal standards.
+
+</KeyTakeaways>

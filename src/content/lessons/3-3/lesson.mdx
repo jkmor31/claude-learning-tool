@@ -1,0 +1,102 @@
+## Turning a prompt you keep retyping into a command
+
+Some prompts get typed over and over: "review this diff against our checklist," "write a migration for this model change," "draft release notes since the last tag." A **custom slash command** saves that prompt as a Markdown file, and typing `/review` runs it. That's the first half of Task Statement 3.2.
+
+## A command is a Markdown file
+
+The file's name becomes the command's name, and its body becomes the prompt:
+
+```text
+.claude/commands/review.md      ->  /review
+.claude/commands/release-notes.md  ->  /release-notes
+.claude/commands/db/migration.md   ->  /db:migration
+```
+
+A simple command:
+
+```markdown
+---
+description: Review staged changes against our checklist
+argument-hint: [focus-area]
+---
+
+Review the staged changes (`git diff --staged`) against
+the checklist in docs/review-checklist.md.
+
+Focus especially on: $ARGUMENTS
+
+Report findings as a table: file, line, severity, issue.
+Skip style nits that the linter already catches.
+```
+
+- **`$ARGUMENTS`** is replaced with whatever the user types after the command, so `/review error handling` puts "error handling" into the prompt.
+- **`description`** explains the command in the `/` menu.
+- **`argument-hint`** shows the user what to type after the command, like `[focus-area]`.
+
+## Where commands live decides who gets them
+
+This is the same scoping idea as MCP servers (Lesson 2.5) and `CLAUDE.md` (Lesson 3.1):
+
+| | Project commands | User commands |
+|---|---|---|
+| Location | `.claude/commands/` in the repo | `~/.claude/commands/` in your home directory |
+| Shared? | **Yes**, through version control | **No**, only you |
+| Use for | Team workflows everyone should run the same way | Personal shortcuts |
+
+The guide's skill: **to make a command available to the whole team, create it in the project's `.claude/commands/` and commit it.** Anyone who clones or pulls the repo gets `/review` with the same checklist, the same output format, and the same rules. When the checklist changes, one pull request updates it for everyone.
+
+A command in `~/.claude/commands/` is yours alone. That's right for a shortcut only you use, and wrong for a team workflow. The diagnosis is the same as in Lesson 3.1: "the new teammate doesn't have `/review`" means it's in someone's home directory instead of the repo.
+
+## Personal variants: give them a different name
+
+Suppose you like the team's `/review` but want a version that also checks your personal performance pet peeves. Don't edit the shared file, because that changes it for everyone. Don't reuse the name `review` in your personal folder either, because then one of the two silently takes priority. You could stop running the team's version without noticing, and "I ran `/review`" would mean different things to different people.
+
+Create a **personal variant with a different name**, like `~/.claude/commands/review-perf.md`. The team's command stays untouched, and yours is clearly yours. The guide states this rule for skills (Lesson 3.4), and it applies equally to commands.
+
+## Pre-loading context into a command
+
+Commands can pull live information into the prompt before Claude sees it. A line starting with an exclamation mark and a command in backticks runs that shell command and inserts its output:
+
+```markdown
+---
+description: Draft release notes since the last tag
+allowed-tools: Bash(git log *) Bash(git describe *)
+---
+
+Last tag: !`git describe --tags --abbrev=0`
+Commits since then:
+!`git log $(git describe --tags --abbrev=0)..HEAD --oneline`
+
+Group these commits into Features, Fixes, and Internal,
+and write user-facing release notes for the first two.
+```
+
+The `allowed-tools` field names the tools this command can use without stopping to ask permission, here just two `git` commands. Lesson 3.4 looks at that field more closely, including what it does and doesn't guarantee.
+
+## Designing good team commands
+
+- **Put the standard in the command, not in people's heads.** The checklist, output format, and skip rules live in the file, so every run is consistent.
+- **Accept arguments for what varies.** The focus area, the ticket number, the target branch.
+- **Keep it one job.** A command that reviews, fixes, commits, and opens a PR is hard to trust. Split it.
+- **Review command changes like code.** A project command runs in every teammate's session.
+
+<Callout type="note" title="Real-world note: commands and skills have merged">
+In current Claude Code, custom commands have been merged into **skills**. A file at `.claude/commands/review.md` and a skill at `.claude/skills/review/SKILL.md` both create `/review`, and existing `.claude/commands/` files keep working. Skills add supporting files and extra frontmatter options, and the docs recommend them for new work. The exam treats commands and skills as separate features with the same scoping rules, so learn both. Current docs also offer `$0`, `$1`, and named arguments alongside `$ARGUMENTS`.
+</Callout>
+
+## How this shows up on the exam
+
+- **"The whole team should have this command"** → `.claude/commands/` in the project, committed to version control.
+- **"A personal shortcut"** → `~/.claude/commands/`.
+- **"A teammate doesn't have the command"** → it's in someone's user-level folder, so move it into the project.
+- **"I want my own version of a team command"** → a personal variant with a **different name**, not an edit to the shared one.
+
+<KeyTakeaways>
+
+- A custom slash command is a **Markdown file**: its name is the command name, its body is the prompt, and `$ARGUMENTS` receives what the user types after it.
+- **Project** commands in `.claude/commands/` are shared through version control. **User** commands in `~/.claude/commands/` are personal.
+- Team workflows belong in project commands, so everyone runs the same standard.
+- Make personal variants of team commands under a **different name**.
+- Frontmatter such as `description` and `argument-hint` make commands easier to use. Lesson 3.4 covers the rest.
+
+</KeyTakeaways>

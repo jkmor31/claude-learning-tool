@@ -1,0 +1,109 @@
+## When one CLAUDE.md gets too big
+
+A project's `CLAUDE.md` starts small: a build command, a test command, a few conventions. A year later it's 900 lines covering API design, testing, deployment, database migrations, the frontend style guide, and three abandoned experiments. Everyone edits it, nobody reads it end to end, and some of it contradicts the rest.
+
+Task Statement 3.1 gives you two tools for keeping configuration **modular**: the **`@import`** syntax and the **`.claude/rules/`** directory.
+
+## `@import`: pull in other files
+
+A `CLAUDE.md` can reference another file with `@path/to/file`. Claude Code expands the reference and loads that file's contents alongside the `CLAUDE.md`:
+
+```markdown
+# Payments service
+
+Build: `npm run build -w payments`
+Test:  `npm test -w payments`
+
+## Standards
+@../../standards/api-errors.md
+@../../standards/money-handling.md
+@../../standards/pci-logging.md
+```
+
+The details:
+
+- Paths can be **relative** or absolute. Relative paths resolve from the file that contains the import, not from where you launched Claude.
+- Imported files can import other files, up to a limited depth.
+- An `@path` inside a code span or code block is left alone, so you can still write about a path without importing it.
+
+## Import selectively, per package
+
+The guide's skill here is specific: **use `@import` to include only the standards files relevant to each package, based on the maintainers' domain knowledge.**
+
+Picture a monorepo with a shared `standards/` folder:
+
+```text
+standards/
+  api-errors.md       money-handling.md    pci-logging.md
+  react-components.md accessibility.md     sql-migrations.md
+
+packages/payments/CLAUDE.md  -> api-errors, money-handling,
+                                pci-logging
+packages/web/CLAUDE.md       -> react-components,
+                                accessibility
+packages/db/CLAUDE.md        -> sql-migrations
+```
+
+Each standard is written **once** and maintained in one place. Each package's `CLAUDE.md` is short, and its imports reflect what the people who own that package know matters there. The payments team knows PCI logging rules apply to them; the web team knows they don't. Claude working in `packages/web/` gets the React and accessibility standards and isn't distracted by money-handling rules.
+
+Compare the alternatives:
+
+- **Everything in the root `CLAUDE.md`**: every session in every package pays for every standard, and relevant rules get lost among irrelevant ones.
+- **Copying standards into each package's file**: they drift apart the first time someone updates one copy.
+
+<Callout type="note" title="Real-world note: imports aren't lazy">
+An imported file loads when the `CLAUDE.md` that imports it loads. Imports keep configuration **organized**, but they don't make a file load conditionally on their own. The token savings in the pattern above come from each package having its *own* `CLAUDE.md` (which loads when Claude works in that package) and importing only what it needs. Claude Code also asks for approval the first time a project's `CLAUDE.md` imports a file from outside the project.
+</Callout>
+
+## `.claude/rules/`: one topic per file
+
+The second tool is the **`.claude/rules/`** directory, an alternative to one monolithic `CLAUDE.md`. Each file covers one topic:
+
+```text
+.claude/
+  CLAUDE.md               short: overview, build, test
+  rules/
+    testing.md            how we write and name tests
+    api-conventions.md    endpoint design, error format
+    deployment.md         release steps, what never to touch
+```
+
+Every `.md` file in the directory is picked up automatically (subfolders too), so there's nothing to register. The benefits:
+
+- **Ownership.** The platform team owns `deployment.md`; the API team owns `api-conventions.md`. Changes are reviewed by the right people, and merge conflicts in one giant file go away.
+- **Findability.** "Where's the testing guidance?" has an obvious answer.
+- **Maintenance.** Outdated topics are easy to spot and delete as a whole file.
+
+A rule file with no special configuration loads at the start of every session, just like `CLAUDE.md`. Rule files can also declare **which paths they apply to**, so they load only when Claude works on matching files. That's the subject of Lesson 3.5.
+
+## Choosing between them
+
+| Situation | Better fit |
+|---|---|
+| A large root `CLAUDE.md` covering many unrelated topics | Split into `.claude/rules/` topic files |
+| Shared standards used by *some* packages in a monorepo | `@import` the relevant ones into each package's `CLAUDE.md` |
+| Content that already lives in a doc (a README, a style guide) | `@import` it rather than copying it |
+| A convention for one file type across the whole repo | Path-scoped rule (Lesson 3.5) |
+
+They combine well: a short root `CLAUDE.md`, topic files in `.claude/rules/`, and package-level files that import shared standards.
+
+<Callout type="exam" title="Watch the wording">
+When a question describes a CLAUDE.md that's become large and hard to maintain, look for "split into focused topic files in `.claude/rules/`." When it describes packages needing *different subsets* of shared standards, look for "`@import` the relevant standards files into each package's CLAUDE.md."
+</Callout>
+
+## How this shows up on the exam
+
+- **"The CLAUDE.md is huge and covers everything"** → split it into topic files in `.claude/rules/` (`testing.md`, `api-conventions.md`, `deployment.md`).
+- **"Each package needs different standards"** → per-package `CLAUDE.md` files that `@import` only the relevant standards.
+- **"Standards are duplicated and drifting"** → keep one copy and `@import` it.
+- Distractors to reject: one giant file "so nothing is missed," copying standards into every package, or putting team standards in user-level files.
+
+<KeyTakeaways>
+
+- **`@path`** in a `CLAUDE.md` imports another file's contents. Relative paths resolve from the importing file.
+- Use imports to give **each package only the standards relevant to it**, chosen by the people who maintain that package.
+- Write each standard **once** and import it; don't copy it.
+- **`.claude/rules/`** holds focused, topic-specific rule files as an alternative to one monolithic `CLAUDE.md`.
+- Rule files without path scoping load every session. Path-scoped rules load only for matching files (Lesson 3.5).
+
+</KeyTakeaways>

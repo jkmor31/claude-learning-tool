@@ -1,0 +1,86 @@
+## Instructions that follow you into every session
+
+Every Claude Code session starts with an empty context window. `CLAUDE.md` files are how you carry knowledge across sessions: build commands, conventions, architecture notes, "always do X" rules. Claude Code reads them at the start of a session and puts their contents into context.
+
+Domain 3 is 20% of the exam, and it starts here: Task Statement 3.1 asks you to know **where** these files live, **who** each location reaches, and how to **diagnose** why an instruction isn't being followed.
+
+## The hierarchy
+
+| Level | Location | Shared with | Typical contents |
+|---|---|---|---|
+| **User** | `~/.claude/CLAUDE.md` | **Only you**, in every project | Personal preferences: your editor habits, how you like explanations |
+| **Project** | `CLAUDE.md` or `.claude/CLAUDE.md` at the repo root | **The whole team**, via version control | Build and test commands, architecture, coding standards |
+| **Directory** | `CLAUDE.md` in a subdirectory, like `packages/api/CLAUDE.md` | The team, via version control | Conventions specific to that part of the codebase |
+
+The rule the exam leans on hardest: **user-level instructions apply only to that user.** `~/.claude/CLAUDE.md` lives in your home directory, not in the repo, so it's never committed and never reaches a teammate.
+
+## They add up; they don't replace each other
+
+Claude Code doesn't pick one file. It **concatenates** every file that applies, from the broadest to the most specific:
+
+```text
+~/.claude/CLAUDE.md             user: your preferences
+repo/CLAUDE.md                  project: team standards
+repo/packages/api/CLAUDE.md     directory: API conventions
+```
+
+When you're working in `packages/api/`, all three are in context, and the more specific file is read later. Two consequences:
+
+- A directory-level file should **add** what's specific to that directory, not repeat the project file.
+- Contradictory instructions at different levels don't cleanly "override." Claude sees both and may follow either. If two files disagree, fix the disagreement.
+
+Subdirectory files load **on demand**: a directory's `CLAUDE.md` joins the context when Claude reads files in that directory, not necessarily at launch. That's efficient, and it's also a source of "why didn't it follow the API rules?" puzzles early in a session.
+
+<Callout type="note" title="Real-world note: two more locations">
+Claude Code also supports an organization-wide **managed policy** `CLAUDE.md` deployed by IT, which applies to everyone on the machine, and **`CLAUDE.local.md`** at the project root for personal, project-specific notes that you add to `.gitignore`. Neither is on the exam's list, but both follow the same logic: who does this file reach?
+</Callout>
+
+## Diagnosing the classic problem
+
+The guide's example is worth knowing cold:
+
+> A developer has used Claude Code on the team repo for months, and it follows the team's conventions perfectly. A new teammate joins, and in their sessions Claude ignores those conventions entirely.
+
+The conventions are the same, the repo is the same, and the model is the same. The difference is **what's loaded**. The likely cause: the instructions live in the original developer's **`~/.claude/CLAUDE.md`**, which the new teammate doesn't have. The fix is to move team conventions into the **project-level** `CLAUDE.md` and commit it, leaving only personal preferences in user scope.
+
+A good diagnostic habit is to ask two questions of any instruction:
+
+1. **Who needs it?** Everyone on the team → project level. Only me → user level. Only code in one directory → directory level.
+2. **Is it actually loaded in this session?** Check, don't assume.
+
+## Checking what's loaded: `/memory`
+
+The **`/memory`** command is the guide's tool for this. It shows which memory files Claude Code is using across user and project scopes and lets you open any of them to edit. When Claude behaves inconsistently across sessions, `/memory` is where you start:
+
+- **Different behavior for different people** → compare what's loaded. One person may have a user-level file with instructions the other lacks.
+- **Different behavior in different folders** → a directory-level `CLAUDE.md` loads only when Claude works in that directory.
+- **An instruction that "worked yesterday"** → it may have been typed into yesterday's conversation, not saved in any file. Conversation instructions don't persist; files do.
+
+<Callout type="note" title="Real-world note: /memory and /context">
+In current Claude Code, `/memory` lists the memory file locations and opens them for editing, and also controls **auto memory** (notes Claude saves for itself). To see exactly which `CLAUDE.md` and rules files were loaded into the *current* session, run `/context` and look under "Memory files." The exam frames `/memory` as the verification tool, so pick it on the exam.
+</Callout>
+
+## CLAUDE.md is context, not enforcement
+
+`CLAUDE.md` makes Claude **likely** to follow an instruction, not certain. The more specific and concise the instruction, the more reliably it's followed: "Run `npm test` before committing" beats "test your changes." But for anything that must never happen, like writing to a production config, you need a deterministic control such as a hook or a permission rule (Lessons 1.6–1.7). This is the same probabilistic-vs-deterministic line from Module 1, applied to configuration.
+
+Keep each `CLAUDE.md` focused, too. It loads every session and costs tokens every session, and long files are followed less reliably. Lesson 3.2 covers splitting a large file into modular pieces.
+
+## How this shows up on the exam
+
+- **"A new teammate doesn't get the conventions"** → the instructions are in someone's user-level `~/.claude/CLAUDE.md`. Move them to project-level `CLAUDE.md`.
+- **"Where should a personal preference go?"** → `~/.claude/CLAUDE.md`, not the shared project file.
+- **"Conventions only for one directory"** → a directory-level `CLAUDE.md` there (or path-specific rules, Lesson 3.5).
+- **"Behavior differs across sessions or people"** → use `/memory` to verify which memory files are loaded.
+- **"It must never happen"** → a hook or permission rule, not a stronger sentence in `CLAUDE.md`.
+
+<KeyTakeaways>
+
+- Three levels: **user** (`~/.claude/CLAUDE.md`, just you), **project** (root `CLAUDE.md` or `.claude/CLAUDE.md`, the team), **directory** (subdirectory `CLAUDE.md`, that part of the codebase).
+- User-level instructions are **never shared** with teammates via version control.
+- Files **combine**, broadest first. More specific files add to broader ones rather than replacing them.
+- The new-teammate problem is almost always instructions stuck in **user scope**.
+- Use **`/memory`** to verify which memory files are loaded when behavior is inconsistent.
+- `CLAUDE.md` guides; hooks and permissions **enforce**.
+
+</KeyTakeaways>
