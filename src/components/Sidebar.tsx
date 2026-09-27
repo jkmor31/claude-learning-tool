@@ -7,7 +7,8 @@ import { modules } from "@/content/curriculum";
 import { useProgress } from "@/lib/progress";
 
 export function Sidebar({ builtIds }: { builtIds: string[] }) {
-  const pathname = usePathname();
+  // The static export uses trailing slashes (/lessons/1-4/), so strip it before comparing.
+  const pathname = usePathname().replace(/\/$/, "");
   const progress = useProgress();
   const [open, setOpen] = useState(false);
   const built = new Set(builtIds);
@@ -52,19 +53,32 @@ export function Sidebar({ builtIds }: { builtIds: string[] }) {
                 {m.lessons.map((l) => {
                   const href = `/lessons/${l.id}`;
                   const active = pathname === href;
-                  const passed = progress[l.id]?.passed;
+                  const lp = progress[l.id];
                   const isBuilt = built.has(l.id);
                   return (
                     <li key={l.id}>
                       <Link
                         href={href}
                         onClick={() => setOpen(false)}
+                        aria-current={active ? "page" : undefined}
                         className={`flex gap-2 rounded-md px-2 py-1.5 text-sm ${
-                          active ? "bg-accent-soft text-foreground" : "hover:bg-background"
+                          active ? "bg-accent-soft font-medium text-foreground" : "hover:bg-background"
                         } ${isBuilt ? "" : "text-muted"}`}
                       >
-                        <span className="w-4 shrink-0 text-center" aria-hidden>
-                          {passed ? <span className="text-success">✓</span> : isBuilt ? "•" : "·"}
+                        <span className="w-4 shrink-0 text-center">
+                          {lp?.passed ? (
+                            <span className="text-success" title={`Passed · best ${lp.bestScore}`}>
+                              ✓<span className="sr-only">Passed</span>
+                            </span>
+                          ) : lp ? (
+                            <span className="text-accent" title={`Attempted · best ${lp.bestScore}, not passed yet`}>
+                              ○<span className="sr-only">Attempted, not passed yet</span>
+                            </span>
+                          ) : (
+                            <span className="text-muted" aria-hidden>
+                              ·
+                            </span>
+                          )}
                         </span>
                         <span className="w-7 shrink-0 tabular-nums text-muted">{l.id.replace("-", ".")}</span>
                         <span>{l.title}</span>

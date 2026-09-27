@@ -2,11 +2,20 @@
 
 import Link from "next/link";
 import { allLessons, modules } from "@/content/curriculum";
-import { useProgress } from "@/lib/progress";
+import { useLastLesson, useProgress } from "@/lib/progress";
 
 export function ModuleGrid({ builtIds }: { builtIds: string[] }) {
   const progress = useProgress();
-  const next = allLessons.find((l) => builtIds.includes(l.id) && !progress[l.id]?.passed);
+  const lastId = useLastLesson();
+  const unpassed = (l: (typeof allLessons)[number]) => builtIds.includes(l.id) && !progress[l.id]?.passed;
+
+  // Resume where you left off: the last lesson you opened, or, if you've passed it, the next unpassed lesson
+  // after it. Fall back to the first unpassed lesson in the course.
+  const lastIndex = allLessons.findIndex((l) => l.id === lastId);
+  const next =
+    lastIndex >= 0 && !progress[allLessons[lastIndex].id]?.passed
+      ? allLessons[lastIndex]
+      : (allLessons.slice(lastIndex + 1).find(unpassed) ?? allLessons.find(unpassed));
 
   return (
     <>
@@ -15,7 +24,7 @@ export function ModuleGrid({ builtIds }: { builtIds: string[] }) {
           href={`/lessons/${next.id}`}
           className="mt-8 inline-block rounded-lg bg-accent px-5 py-2.5 font-medium text-white"
         >
-          {Object.keys(progress).length ? "Continue" : "Start"}: {next.id.replace("-", ".")} {next.title}
+          {lastId || Object.keys(progress).length ? "Continue" : "Start"}: {next.id.replace("-", ".")} {next.title}
         </Link>
       )}
       <div className="mt-10 grid gap-4 sm:grid-cols-2">

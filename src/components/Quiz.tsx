@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { QuizQuestion } from "@/content/types";
 import { passThreshold } from "@/content/curriculum";
 import { recordQuizResult } from "@/lib/progress";
@@ -19,6 +19,16 @@ export function Quiz({ lessonId, questions }: { lessonId: string; questions: Qui
   const threshold = passThreshold(questions.length);
   const passed = score >= threshold;
   const complete = questions.every((q, i) => answers[i].length === q.correct.length);
+  const missed = questions.map((q, i) => (isCorrect(q, answers[i]) ? -1 : i)).filter((i) => i >= 0);
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // After submitting or retrying, bring the top of the quiz (with the result summary) into view.
+  const [scrollKey, setScrollKey] = useState(0);
+  useEffect(() => {
+    if (scrollKey === 0) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    sectionRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  }, [scrollKey]);
 
   function toggle(qi: number, ci: number) {
     if (submitted) return;
@@ -35,27 +45,56 @@ export function Quiz({ lessonId, questions }: { lessonId: string; questions: Qui
   function submit() {
     setSubmitted(true);
     recordQuizResult(lessonId, score, passed);
+    setScrollKey((k) => k + 1);
   }
 
   function retry() {
     setAnswers(questions.map(() => []));
     setSubmitted(false);
+    setScrollKey((k) => k + 1);
   }
 
   return (
-    <section aria-labelledby="quiz-heading" className="mt-14">
+    <section ref={sectionRef} aria-labelledby="quiz-heading" className="mt-14 scroll-mt-20">
       <h2 id="quiz-heading" className="text-2xl font-semibold">Knowledge Check</h2>
       <p className="mt-1 text-sm text-muted">
         {questions.length} questions · pass with {threshold}/{questions.length}. Multi-select items are scored
         all-or-nothing, like the real exam.
       </p>
 
+      {submitted && (
+        <div
+          role="status"
+          className={`mt-5 rounded-xl border px-5 py-4 ${passed ? "border-success bg-success-soft" : "border-danger bg-danger-soft"}`}
+        >
+          <p className="text-lg font-semibold">
+            {score}/{questions.length} · {passed ? "Passed" : "Not yet"}
+          </p>
+          {missed.length > 0 ? (
+            <p className="mt-1 text-sm">
+              Review {missed.length === 1 ? "the question" : "the questions"} you missed:{" "}
+              {missed.map((i, n) => (
+                <span key={i}>
+                  {n > 0 && ", "}
+                  <a href={`#q-${i + 1}`} className="font-medium underline underline-offset-2 hover:text-accent">
+                    Q{i + 1}
+                  </a>
+                </span>
+              ))}
+              . Each one explains why the right answer is right and why the others aren&apos;t.
+            </p>
+          ) : (
+            <p className="mt-1 text-sm">Every answer correct.</p>
+          )}
+        </div>
+      )}
+
       <ol className="mt-6 space-y-6">
         {questions.map((q, qi) => {
           const picked = answers[qi];
           const right = isCorrect(q, picked);
           return (
-            <li key={qi} className="rounded-xl border border-border bg-surface p-5">
+            <li key={qi} id={`q-${qi + 1}`} className="scroll-mt-20 rounded-xl border border-border bg-surface p-5">
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted">Question {qi + 1}</span>
                 <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs">
