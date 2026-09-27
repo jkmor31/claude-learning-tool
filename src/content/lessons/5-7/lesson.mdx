@@ -1,0 +1,105 @@
+## Where did that number come from?
+
+A research system's report says "the market grew 18% last year." Which source says that? Is it the same source that reported 12% elsewhere in the report? Was the 18% measured last year or three years ago? If the report can't answer these questions, readers can't trust it, however polished it is.
+
+The last task statement in Domain 5, 5.6, is about **provenance** (keeping every claim tied to its source through the whole pipeline) and **uncertainty** (reporting conflicts and gaps honestly instead of smoothing them over).
+
+## How attribution gets lost
+
+In a multi-agent research pipeline, findings pass through several hands: search subagents, the coordinator, a synthesis agent, sometimes a summarizer. Each step compresses. The guide names the failure: **source attribution is lost during summarization when findings are compressed without preserving claim-source mappings.**
+
+```text
+Subagent:   "Heat-pump sales rose 31% in 2025 (Northwind
+            Energy Review 2026, p.14)."
+Summary 1:  "Heat-pump sales rose about 30% last year."
+Summary 2:  "Heat-pump adoption is growing rapidly."
+```
+
+Each step is individually reasonable, and by the end the claim is unattributable and vague. Lesson 1.5 introduced the fix for handoffs; this lesson extends it through synthesis.
+
+## Structured claim-source mappings
+
+Require subagents to output **structured claim-source mappings**, including **source URLs, document names and relevant excerpts**, and require downstream agents to **preserve and merge them** through synthesis:
+
+```json
+{
+  "claim": "Heat-pump sales rose 31% in 2025",
+  "source": "Northwind Energy Review 2026",
+  "url": "https://example.org/northwind-review-2026",
+  "excerpt": "sales grew 31% year on year in 2025",
+  "date": "2026-04",
+  "method": "national registration data, 40 markets"
+}
+```
+
+The synthesis agent's instructions then say: **every claim in the report keeps its mapping**; when claims are merged, their sources are merged too, never dropped. The report can show citations inline, and anyone can check a claim against its excerpt.
+
+## Conflicting numbers: annotate, don't pick
+
+Credible sources disagree all the time. One analyst reports 18% growth and another reports 12%. The tempting move is to pick one: the bigger publisher, the more recent one, or the round-number average. The guide says: **annotate conflicts with source attribution rather than arbitrarily selecting one value.**
+
+```text
+Market growth, 2025:
+- 18% (Analyst A, 2026-02; revenue-based, incl. services)
+- 12% (Analyst B, 2026-01; unit shipments only)
+The difference likely reflects the metric: revenue vs units.
+```
+
+Now the reader sees both values, who reported them, and the plausible reason they differ. Often the "conflict" is two different measurements.
+
+The same applies earlier in the pipeline: a document-analysis step should **complete its analysis with the conflicting values included and explicitly annotated**, and **let the coordinator decide how to reconcile them** before passing anything to synthesis. A subagent that silently picks one value has made an editorial decision it wasn't asked to make, and the evidence for the other value is gone.
+
+## Dates prevent false contradictions
+
+Some "conflicts" aren't conflicts at all. A 2021 source says unemployment was 6.1%; a 2025 source says 4.2%. Without dates, that looks like two sources disagreeing. With dates, it's a trend. The guide: **require publication or data collection dates in structured outputs**, so **temporal differences aren't misread as contradictions.** Note both dates when they differ: a 2025 report can describe 2023 data.
+
+## Structure the report around certainty
+
+A good synthesis report makes its certainty visible. The guide's practice: **explicit sections distinguishing well-established findings from contested ones**, **preserving the original sources' characterizations and methodological context**:
+
+```text
+## Well-established
+- Heat-pump sales grew roughly 30% in 2025 (Northwind;
+  Halden Institute; national registries). Three independent
+  sources, consistent methods.
+
+## Contested
+- 2026 growth forecasts range from 15% to 28%. Sources
+  differ in subsidy assumptions (see table).
+
+## Gaps
+- No recent data for Africa or South America (sources
+  unavailable; see coverage notes).
+```
+
+"Preserving characterizations" matters too. If a study says its result is "preliminary" or "based on a small sample," the report keeps that qualifier instead of promoting the finding to established fact.
+
+## Render each kind of content in its natural form
+
+Synthesis often flattens everything into uniform paragraphs. The guide recommends **rendering different content types appropriately**:
+
+- **Financial data as tables**: numbers side by side, with units and periods.
+- **News and narrative as prose**: sequence and context matter.
+- **Technical findings as structured lists**: discrete, checkable items.
+
+A table of five companies' quarterly revenue is readable at a glance; the same data as prose is a paragraph of numbers nobody can compare.
+
+## How this shows up on the exam
+
+- **"The final report's claims can't be traced to sources"** → subagents output **claim-source mappings** (URL, document name, excerpt) that synthesis **preserves and merges**.
+- **"Two credible sources give different statistics"** → include **both, annotated with their sources**; don't pick one arbitrarily.
+- **"A subagent resolved a conflict on its own"** → include conflicting values with annotations and **let the coordinator reconcile**.
+- **"Old and new figures look contradictory"** → require **publication or collection dates**.
+- **"Readers can't tell solid findings from disputed ones"** → **established vs contested sections**, keeping the sources' own qualifiers.
+- **"Everything is prose, including financial data"** → render **tables for numbers, prose for news, lists for technical findings**.
+
+<KeyTakeaways>
+
+- Attribution is lost when summaries compress findings without their **claim-source mappings**.
+- Subagents output **structured mappings** (source URL, document name, excerpt), and synthesis **preserves and merges** them.
+- For **conflicting statistics**, report both values with attribution. Don't pick one; let the coordinator reconcile.
+- Require **publication or collection dates** so temporal differences aren't mistaken for contradictions.
+- Separate **well-established** from **contested** findings, preserving the sources' own characterizations.
+- Render **financial data as tables, news as prose, technical findings as lists**.
+
+</KeyTakeaways>

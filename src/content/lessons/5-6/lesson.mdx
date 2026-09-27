@@ -1,0 +1,82 @@
+## Deciding what humans still need to check
+
+An extraction system that's "97% accurate" sounds ready to run without human review. It might be. It might also be failing badly on one kind of document that happens to be rare in your test set. Task Statement 5.5 is about the evidence you need before reducing human review, and how to spend limited reviewer time where it matters most.
+
+## Aggregate accuracy hides weak segments
+
+The guide's warning: **aggregate accuracy metrics (e.g., 97% overall) may mask poor performance on specific document types or fields.**
+
+| Segment | Share of volume | Accuracy |
+|---|---|---|
+| Typed invoices | 80% | 99.4% |
+| Scanned PDFs | 15% | 94.0% |
+| Handwritten receipts | 5% | **71.0%** |
+| **Overall** | 100% | **97.2%** |
+
+The overall number is dominated by the easy majority. If you automate on the strength of "97%," almost three in ten handwritten receipts go through wrong. The same happens with **fields**: `total` may be 99.8% accurate while `tax_id` is 88%.
+
+The rule: **validate accuracy by document type and by field before automating**, and reduce human review only for segments that meet the bar **on their own**.
+
+## Field-level confidence, calibrated
+
+To route individual extractions, you need a signal per extraction. The guide's approach: **have the model output field-level confidence scores, then calibrate review thresholds using a labeled validation set.**
+
+"Calibrated" is the key word. A raw self-reported "0.9" doesn't mean 90% of such extractions are correct; the model's numbers aren't reliable probabilities on their own (Lessons 4.1 and 5.3 warned against using them as-is). Calibration turns them into something you can trust:
+
+1. Run the extractor on a **labeled validation set**, where you know the right answers.
+2. For each field, group extractions by reported confidence and measure the **actual accuracy** in each group.
+3. Set each field's threshold where actual accuracy meets your bar.
+
+```text
+Field: tax_id (validation set, n=2,000)
+  reported conf >= 0.95  ->  actual 99.1%  -> auto-accept
+  0.80 to 0.95           ->  actual 93.5%  -> human review
+  < 0.80                 ->  actual 61.0%  -> human review, priority
+```
+
+Thresholds differ **per field**. A reported 0.9 on `total` might be very reliable while a 0.9 on `tax_id` isn't. Recalibrate when the model, prompt or document mix changes.
+
+## Routing: where reviewers look
+
+Reviewer time is limited, so route deliberately. The guide says to send to human review:
+
+- Extractions with **low model confidence** (below the calibrated threshold for that field).
+- Documents that are **ambiguous or contradictory** at the source, such as a `conflict_detected` flag (Lesson 4.6), two different totals, or illegible key fields, regardless of confidence.
+
+Then **prioritize** within the queue: high-value documents and low-confidence critical fields first. The point isn't to review everything, but to put limited human attention where errors are most likely and most costly.
+
+## Keep sampling what you don't review
+
+Once high-confidence extractions are auto-accepted, nobody looks at them, and that's exactly where **new error patterns** can grow unnoticed: a vendor changes their invoice layout, or a new document type starts arriving. The guide's safeguard is **stratified random sampling of high-confidence extractions**, for **ongoing error-rate measurement** and **detection of novel error patterns**.
+
+- **Random**, so the sample represents what's actually being auto-accepted.
+- **Stratified** by document type (and often by vendor or field), so small segments get enough samples to measure. A plain random sample of 200 would include only about 10 handwritten receipts.
+
+```text
+Weekly audit sample of auto-accepted extractions:
+  typed invoices        100  (of 40,000)
+  scanned PDFs           60  (of  7,500)
+  handwritten receipts   40  (of  2,500)
+```
+
+If the sampled error rate for a segment climbs above its bar, that segment goes back to fuller human review while you investigate.
+
+<Callout type="exam" title="Automation is earned per segment">
+The exam's best answers treat reducing human review as something each **segment** earns with evidence: accuracy measured per document type and field, calibrated thresholds, and continued sampling. Answers that automate based on one overall accuracy number, or on raw uncalibrated confidence, are the distractors.
+</Callout>
+
+## How this shows up on the exam
+
+- **"97% overall accuracy, so turn off human review"** → first check accuracy **by document type and field**; aggregates can hide weak segments.
+- **"How do we decide which extractions need review?"** → **field-level confidence** with thresholds **calibrated on a labeled validation set**.
+- **"Reviewers can't keep up"** → route **low-confidence** and **ambiguous or contradictory** documents to people, and prioritize.
+- **"How do we know auto-accepted results stay good?"** → **stratified random sampling** of high-confidence extractions.
+
+<KeyTakeaways>
+
+- **Aggregate accuracy can mask** poor performance on specific document types or fields. Validate **per segment** before automating.
+- Have the model output **field-level confidence**, then **calibrate thresholds on a labeled validation set**, per field.
+- Route **low-confidence** extractions and **ambiguous or contradictory** source documents to human review, **prioritizing** limited capacity.
+- Use **stratified random sampling** of high-confidence extractions to keep measuring error rates and catch **novel error patterns**.
+
+</KeyTakeaways>

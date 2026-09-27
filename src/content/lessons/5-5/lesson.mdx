@@ -1,0 +1,100 @@
+## The long exploration problem
+
+Understanding a large codebase takes many steps: find the entry points, trace a flow, map the dependencies, check the tests, then answer a dozen follow-up questions. Done in one long session, this runs into a predictable problem: **the context fills up, and the quality of the agent's answers quietly degrades.** Task Statement 5.4 covers how to spot that and design around it.
+
+## What context degradation looks like
+
+The guide names the symptoms. Deep into an extended session, the agent starts to:
+
+- **Give inconsistent answers**, contradicting what it said an hour ago about how refunds are processed.
+- **Reference "typical patterns"** instead of the **specific classes it discovered earlier**: "this is usually handled by a service layer," rather than "`RefundOrchestrator.settle()` handles this, as we found in `billing/refunds.ts`."
+
+The second symptom is the tell. The specifics are still somewhere in the conversation, but buried under hundreds of file reads and search results, so the agent falls back on general knowledge. It sounds plausible and is increasingly generic, which is a dangerous combination when someone is about to change the code based on it.
+
+## Four techniques
+
+### 1. Scratchpad files for key findings
+
+Have the agent **maintain a scratchpad file** that records key findings as it goes, and **reference it for later questions**:
+
+```markdown
+# exploration-notes.md
+
+## Refund flow
+- Entry: POST /api/refunds -> RefundController.create
+  (src/api/refunds.ts:41)
+- Orchestration: RefundOrchestrator.settle
+  (src/billing/refunds.ts:118)
+- Idempotency: key = order_id + amount; stored in
+  refund_attempts table
+- Gotcha: partial refunds bypass settle() (see
+  PartialRefundJob, src/jobs/partial.ts)
+
+## Open questions
+- Who calls PartialRefundJob besides the nightly cron?
+```
+
+A file sits **outside the context window**, so it survives compaction, crashes and new sessions. When a later question comes up ("does the partial-refund path handle idempotency?"), the agent reads the notes and gets back the exact class names and line numbers, instead of reconstructing them from a degraded memory. This counteracts degradation directly.
+
+### 2. Subagents for verbose exploration
+
+Delegate **specific investigation questions** to subagents, such as **"find all test files"** or **"trace refund flow dependencies,"** while the main agent keeps the **high-level coordination**. The subagent does the verbose reading in its own context and returns a summary. The main context holds the map, not the terrain (the Explore subagent from Lesson 3.6 is one built-in way to do this).
+
+### 3. Summarize between phases
+
+Multi-phase work (map the architecture, then trace flows, then plan changes) should **summarize the key findings of one phase before spawning subagents for the next**, and **inject that summary into their initial context**.
+
+```text
+Phase 1 (mapping) -> summary: modules, entry points, owners
+                         |
+                         v  injected into each Phase 2 prompt
+Phase 2 subagents: "Given this architecture summary, trace
+                    how X flows through Y"
+```
+
+Each phase starts from a compact, accurate base instead of rediscovering what the last phase already learned, and nobody has to carry Phase 1's raw file reads forward.
+
+### 4. State manifests for crash recovery
+
+Long explorations can be interrupted by a crash, a timeout or a closed laptop. The guide's pattern is **structured state persistence**: **each agent exports its state to a known location**, and **the coordinator loads a manifest on resume** and **injects it into agent prompts**.
+
+```json
+{
+  "task": "map billing subsystem before refactor",
+  "phase": 2,
+  "completed": [
+    {"agent": "mapper", "output": "state/mapper.json"},
+    {"agent": "refund-tracer", "output": "state/refunds.json"}
+  ],
+  "pending": ["subscription-tracer", "test-inventory"],
+  "notes": "exploration-notes.md"
+}
+```
+
+On restart, the coordinator reads the manifest, skips the completed work, feeds each pending agent the relevant saved outputs, and continues. Without it, a crash at hour three means starting over, or worse, resuming a session whose context no longer matches reality (Lesson 1.9).
+
+## How the pieces fit
+
+| Problem | Technique |
+|---|---|
+| Specifics fade as context fills | **Scratchpad file** of key findings, consulted for later questions |
+| Exploration output floods the main context | **Subagents** for specific questions; main agent coordinates |
+| Each phase re-learns the last phase's findings | **Summarize between phases**, inject into the next phase's prompts |
+| A crash loses hours of work | **State exports plus a manifest** the coordinator loads on resume |
+
+## How this shows up on the exam
+
+- **"The agent starts referring to 'typical patterns' and contradicting earlier findings"** → context degradation; use a **scratchpad file** and **subagents**.
+- **"Keep the main agent's context for coordination"** → delegate specific questions like "find all test files" to **subagents**.
+- **"Phase 2 agents redo Phase 1 work"** → **summarize Phase 1** and inject it into Phase 2 prompts.
+- **"Resume after a crash without redoing work"** → agents export state; the coordinator loads a **manifest** and injects it.
+
+<KeyTakeaways>
+
+- **Context degradation**: in long sessions, answers turn inconsistent and generic ("typical patterns") instead of citing the specific classes found earlier.
+- **Scratchpad files** persist key findings outside the context window; refer back to them for later questions.
+- **Subagents** isolate verbose exploration while the main agent keeps the high-level picture.
+- **Summarize each phase** and inject the summary into the next phase's subagents.
+- For **crash recovery**, agents export structured state to a known location, and the coordinator loads a **manifest** on resume.
+
+</KeyTakeaways>
