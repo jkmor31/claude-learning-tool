@@ -1,0 +1,127 @@
+## Errors are information
+
+When a tool fails, the agent has to decide what to do next: retry, fix its input, explain the situation to the user, try another route, or escalate. It can only decide well if the tool tells it **what kind of failure** happened. Task Statement 2.2 covers how MCP tools should report errors so the agent can recover sensibly.
+
+## The MCP isError flag
+
+In the Model Context Protocol, a tool result includes a content payload and an optional **`isError`** flag. Setting `isError: true` tells the client, and through it the model, that **the tool call failed**, as opposed to succeeding with results the model should act on.
+
+That distinction matters. A tool that catches an exception and returns the error message as ordinary content, without `isError`, is asking the model to guess whether "Order service timed out" is data or a failure. Mark failures as failures.
+
+But `isError` alone only says *that* something failed. The agent also needs to know *what kind* of failure, because different kinds need different responses.
+
+## Four kinds of failure
+
+The guide names four error categories:
+
+| Category | Examples | Retry as-is? | What the agent should do |
+|---|---|---|---|
+| **Transient** | Timeout, service unavailable, rate limited | **Yes**, after a short wait | Retry, maybe with backoff. If it keeps failing, report partial progress. |
+| **Validation** | Malformed order ID, date in the wrong format, missing field | **No**, fix the input first | Correct the input, or ask the user for the right value. |
+| **Business** | Refund outside the return window, amount above policy limit | **No** | Explain the policy to the customer, or escalate if an exception is warranted. |
+| **Permission** | Caller not authorized for this account or action | **No** | Stop. Don't retry. Escalate or tell the user it can't be done here. |
+
+## Why "Operation failed" is an anti-pattern
+
+A tool that returns the same generic error for everything, such as `"Operation failed"`, takes away the information the agent needs:
+
+- It **retries validation errors**, sending the same malformed input three times and getting the same failure three times.
+- It **tells customers to "try again later"** for a policy violation that will never succeed.
+- It **gives up on transient errors** that would have worked on a second attempt.
+- It **can't explain** anything to the user, because it doesn't know what went wrong.
+
+The guide makes the point directly: **uniform error responses prevent the agent from making appropriate recovery decisions**, and **structured metadata prevents wasted retry attempts**.
+
+## A structured error response
+
+Return the category, whether a retry could help, and a readable description. For business errors, add a message the agent can pass on to the customer:
+
+```json
+{
+  "isError": true,
+  "content": [{
+    "type": "text",
+    "text": "{\"errorCategory\": \"business\", \"isRetryable\": false, ...}"
+  }]
+}
+```
+
+The payload inside, shown here unescaped for readability:
+
+```json
+{
+  "errorCategory": "business",
+  "isRetryable": false,
+  "code": "RETURN_WINDOW_EXPIRED",
+  "description": "Delivered 45 days ago; refund window is 30 days.",
+  "customerMessage": "Returns are accepted within 30 days of delivery."
+}
+```
+
+A transient failure looks different:
+
+```json
+{
+  "errorCategory": "transient",
+  "isRetryable": true,
+  "description": "Order service timed out after 10s.",
+  "retryAfterSeconds": 2
+}
+```
+
+With these fields, the agent's decision becomes simple and dependable: **retry** if `isRetryable` is true, **fix the input** for `validation`, **explain `customerMessage`** for `business`, and **stop and escalate** for `permission`. The `customerMessage` field matters because it lets the agent explain a policy accurately and politely, instead of making up a reason or exposing internal error codes.
+
+## Empty results aren't errors
+
+One distinction causes more quiet bugs than any other: **an access failure is not the same as a valid empty result.**
+
+| Situation | Correct response |
+|---|---|
+| The search ran and found no matching orders | Success, `isError: false`, result: `[]`. "There are no orders for this email" is an answer. |
+| The search couldn't run: timeout, database down | Failure, `isError: true`, `errorCategory: "transient"`, retryable |
+
+Mixing them up goes wrong in both directions:
+
+- A timeout reported as an **empty success** means the agent confidently tells a customer, *"You have no orders with us,"* which is false. Research reports quietly lose whole sections.
+- An empty result reported as an **error** makes the agent retry pointlessly, or escalate a question that was actually answered.
+
+The coordinator case is similar: a subagent must tell the coordinator whether it *couldn't search* or *searched and found nothing*. Those lead to completely different next steps (Lesson 5.4 covers this across multi-agent systems).
+
+## Recover locally, propagate what you can't fix
+
+In a multi-agent system, where should error handling happen? The guide's answer: **subagents handle transient failures locally**, and **only propagate errors they can't resolve**, together with **partial results and what was attempted**.
+
+```
+search subagent hits a timeout
+   -> retries locally with backoff (a transient error it can handle)
+   -> succeeds on attempt 2: the coordinator never hears about it
+
+search subagent hits repeated timeouts on one source
+   -> tries an alternative query or source
+   -> still failing: returns to the coordinator:
+      { status: "partial",
+        completed: ["solar", "wind"],
+        failed: { subtopic: "storage", category: "transient",
+                  attempted: ["3 retries", "alternate query"] },
+        results: [ ...findings for solar and wind... ] }
+```
+
+Handling blips locally keeps the coordinator's context clean and avoids re-running a whole subtask over a hiccup. When a failure does get propagated, the partial results and the record of what was tried let the coordinator make a real decision: accept the partial coverage and note the gap, reassign the failed piece, or try a different approach. Silently swallowing the failure and failing the whole workflow over it are both wrong. Lesson 5.4 goes deeper on this.
+
+## How this shows up on the exam
+
+- **"The agent retries hopeless requests" or "tells customers to try later for policy violations"** → structured errors with `errorCategory`, `isRetryable`, and a description. The distractor is a generic error message with better prompt instructions.
+- **Business-rule violations** → `isRetryable: false` plus a customer-friendly explanation the agent can relay.
+- **"The agent told a customer they have no orders during a database outage"** → the access failure was reported as an empty success. Use `isError` with a transient category.
+- **"Transient subagent failures cause the whole task to be redone"** → retry locally, and propagate only unresolved errors with partial results and what was attempted.
+
+<KeyTakeaways>
+
+- Use MCP's **`isError`** flag so failures are never confused with successful results.
+- Tell the agent **what kind** of failure it was: **transient** (retry), **validation** (fix the input), **business** (explain or escalate), or **permission** (stop).
+- Return structured metadata: **`errorCategory`, `isRetryable`, a description**, and for business errors a **customer-friendly message**.
+- Generic errors like "Operation failed" cause **wasted retries and wrong explanations**.
+- **An empty result is a success; an access failure is an error.** Never report one as the other.
+- Subagents **recover locally** from transient failures and **propagate only what they can't fix**, with partial results and what was attempted.
+
+</KeyTakeaways>

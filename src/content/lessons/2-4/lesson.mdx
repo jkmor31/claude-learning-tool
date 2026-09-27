@@ -1,0 +1,106 @@
+## Who decides whether a tool gets called?
+
+Normally, Claude decides for itself whether to call a tool and which one. Most of the time that's what you want. But some workflows need more control: an extraction pipeline that must always return structured data rather than chat, or a process where one particular tool must run first. The API's **`tool_choice`** parameter provides that control, and it's the second half of Task Statement 2.3.
+
+## The options
+
+| `tool_choice` | What the model must do | Typical use |
+|---|---|---|
+| `{"type": "auto"}` (default) | Decide for itself: call a tool, or reply with text | Normal agents and conversations |
+| `{"type": "any"}` | Call **some** tool, of its choosing | Guarantee a tool call rather than conversational text |
+| `{"type": "tool", "name": "X"}` | Call **tool X** specifically | Guarantee that a particular step happens (**forced selection**) |
+| `{"type": "none"}` | Not call any tool | A text-only turn even though tools are defined |
+
+The guide focuses on the first three: `"auto"`, `"any"`, and forced selection. You can also add `"disable_parallel_tool_use": true` to any of them to limit the model to one tool call per response.
+
+The key contrast to remember:
+
+- **`auto`: the model *may* return text instead of calling a tool.**
+- **`any`: the model *must* call a tool, but chooses which.**
+- **Forced: the model *must* call the specific tool you name.**
+
+## "any": guarantee a tool call, let the model pick
+
+Suppose an extraction pipeline has three extraction tools, `extract_invoice`, `extract_receipt`, and `extract_purchase_order`, each with its own JSON schema. Documents arrive without a type label.
+
+With `auto`, the model usually calls the right extractor. Occasionally, though, it replies with a helpful paragraph ("This appears to be an invoice from Acme Corp for $4,200…"), and your pipeline, which expected structured data, breaks.
+
+With `tool_choice: {"type": "any"}`, a text-only reply isn't possible. The model **must** call one of the tools, and it still decides which schema fits the document. That's the guide's use case: **setting `tool_choice: "any"` to guarantee the model calls a tool rather than returning conversational text**, especially when **multiple extraction schemas exist and the document type is unknown**. (Module 4 covers extraction schemas in depth.)
+
+## Forced selection: make a specific step happen first
+
+Sometimes the order matters. An enrichment pipeline might need `extract_metadata` to run before any enrichment tools, because those tools need the document's company name, date, and type. Forcing the first call guarantees it:
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+
+# Turn 1: force metadata extraction first
+first = client.messages.create(
+    model="claude-opus-5",
+    max_tokens=4096,
+    tools=[extract_metadata, lookup_company, classify_sector],
+    tool_choice={"type": "tool", "name": "extract_metadata"},
+    messages=messages,
+)
+
+# ...run extract_metadata, then append the assistant turn and
+# its tool_result to messages (Lesson 1.1)...
+
+# Later turns: back to auto so the model chooses enrichment
+# steps itself and can finish with end_turn
+follow_up = client.messages.create(
+    model="claude-opus-5",
+    max_tokens=4096,
+    tools=[extract_metadata, lookup_company, classify_sector],
+    tool_choice={"type": "auto"},
+    messages=messages,
+)
+```
+
+That's the pattern in the guide: **use forced selection to ensure a specific tool is called first, then process subsequent steps in follow-up turns.**
+
+<Callout type="warning" title="Don't force on every turn">
+If an agentic loop sends forced `tool_choice` (or `any`) on **every** request, the model can never answer with text, so it can never end with `end_turn`. The loop only stops at your iteration backstop, which Lesson 1.1 warned against relying on. Force the step that must happen, then switch back to `auto`.
+</Callout>
+
+## What tool_choice does and doesn't guarantee
+
+- `any` and forced selection guarantee **that a tool call happens**. Combined with a JSON input schema, they guarantee **well-formed, schema-shaped arguments**.
+- They **don't** guarantee the arguments are **correct**. A forced extraction can still put a value in the wrong field or produce line items that don't add up to the stated total. Validation and retry loops handle that (Lesson 4.6).
+- Forcing a tool doesn't make the model understand when it's appropriate. If the tool doesn't fit the input, forcing it produces a confident but meaningless call. Force only when the step is always valid.
+
+## Compared with enforcing order through hooks
+
+Lesson 1.6 enforced order with a **prerequisite gate**: a hook that blocks `process_refund` until verification has happened. How is forced `tool_choice` different?
+
+| | Forced `tool_choice` | Prerequisite gate (hook) |
+|---|---|---|
+| Works by | Making the model call a tool on **this request** | Blocking a tool until prior **state** exists |
+| Best for | Fixed pipelines where step 1 is always the same | Agentic loops where the model chooses the path but some steps require others first |
+| Scope | One API request | Every attempt, across the whole session |
+
+In a fixed pipeline, forcing the first step is simple and direct. In an open-ended agent, where you don't know which turn needs the rule, a gate enforces it wherever it comes up.
+
+<Callout type="note" title="Real-world note: model support">
+The exam tests `auto`, `any`, and forced selection as described here, and models such as Claude Opus 5 support all three. Some newer models, including Claude Fable 5.1 and Claude Opus 5.5, **reject** `any` and forced `tool` choices with an error. On those models, use `auto` with an explicit instruction naming the tool (and check that a call was made), `strict: true` on the tool for schema-valid arguments, or structured outputs when the forced call only existed to get JSON back. Check your model's documentation before relying on forced tool use.
+</Callout>
+
+## How this shows up on the exam
+
+- **"The pipeline sometimes gets text instead of structured output"** → `tool_choice: "any"`, especially when several schemas exist and the document type is unknown. Forcing one specific extractor is wrong when the type is unknown.
+- **"Step X must always run first"** in a fixed pipeline → forced selection `{"type": "tool", "name": "X"}` on the first request, then `auto` for follow-ups.
+- **"The loop never ends"** after adding `tool_choice` → it's being forced on every turn. Force only the required step.
+- **Semantic errors in extracted values** → `tool_choice` doesn't fix those. You need validation and retries.
+
+<KeyTakeaways>
+
+- **`auto`** (default): the model may call a tool or reply with text.
+- **`any`**: the model must call *a* tool of its choosing. Use it to guarantee structured output instead of chat, for example when choosing among several extraction schemas.
+- **Forced** `{"type": "tool", "name": "..."}`: the model must call *that* tool. Use it to guarantee a step, like `extract_metadata`, runs first, then return to `auto` for later turns.
+- Forcing on **every** turn prevents `end_turn`. Force only the step that must happen.
+- `tool_choice` guarantees **a call and well-formed arguments**, not **correct values**.
+- Real-world: some newer models reject `any` and forced choices, so check the docs and use `auto` with explicit instructions, `strict` tools, or structured outputs there.
+
+</KeyTakeaways>

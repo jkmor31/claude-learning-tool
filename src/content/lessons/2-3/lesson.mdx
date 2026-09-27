@@ -1,0 +1,82 @@
+## More tools isn't more capability
+
+It's tempting to give every agent every tool, on the theory that more tools make a more capable agent. The guide says the opposite: **giving an agent too many tools, for example 18 instead of 4–5, degrades tool selection reliability by increasing decision complexity.**
+
+Every request forces the model to choose among all the tools it can see. With 4 well-described, clearly different tools, that's an easy choice. With 18, many of which overlap a little, every turn is harder, and the chance of picking a plausible-but-wrong tool goes up. Lesson 2.1 was about making each description clear. This lesson is about how **many** tools each agent has and **which** ones.
+
+This lesson covers the first half of Task Statement 2.3: distributing tools across agents. Lesson 2.4 covers the second half, `tool_choice`.
+
+## Agents misuse tools outside their role
+
+The second problem is subtler. An agent given a tool that doesn't belong to its role **tends to use it**. The guide's example is **a synthesis agent attempting web searches**.
+
+The synthesis agent's job is to combine findings it was given. Give it a `web_search` tool and it starts running its own searches mid-synthesis. It pulls in unvetted sources, bypasses the coordinator's routing and error handling, duplicates the search agent's work, and adds latency. Nothing about its prompt told it to do this. The tool was simply there, and searching looked helpful.
+
+This is Lesson 1.4's `tools` restriction seen from the design side: **the tool list defines the role** at least as much as the system prompt does.
+
+## Scoped tool access
+
+The principle is **least privilege for agents**: each agent gets only the tools its role requires.
+
+| Agent | Tools | Deliberately excluded |
+|---|---|---|
+| Web search | `web_search`, `load_document` | Report writing, ticket or database access |
+| Document analysis | `extract_data_points`, `summarize_content` | Web search |
+| Synthesis | `verify_fact` (narrow; see below) | General web search, document fetching |
+| Report | `format_citation`, `render_table` | Any search or data access |
+| Coordinator | Task (to spawn subagents) | The subagents' specialist tools |
+
+Scoping does three things:
+
+1. **Better selection:** each agent chooses among a few relevant tools.
+2. **Less misuse:** an agent can't wander into another role's work.
+3. **A smaller blast radius:** a confused or manipulated agent can only do what its role allows. A prompt injection in a web page read by the search agent can't make it edit records if it has no editing tools.
+
+In the Agent SDK you implement this with each subagent's `tools` list (Lesson 1.4). With the raw API, send each call only the tools that agent needs.
+
+## Replace generic tools with constrained ones
+
+Scoping is about *which* tools an agent gets. It also matters *how broad* each tool is. A generic tool like `fetch_url(url)` can fetch anything: internal admin pages, multi-gigabyte binaries, login-protected content, pages carrying prompt-injection text. Each of those is a place for things to go wrong.
+
+The guide's example is to **replace `fetch_url` with `load_document`, which validates document URLs**:
+
+| `fetch_url(url)` | `load_document(url)` |
+|---|---|
+| Any URL, any content type | Only allowed domains or known document hosts |
+| Returns raw bytes or HTML | Returns extracted text plus metadata (title, page count, source URL) |
+| No size limit | Rejects oversized or non-document content with a validation error |
+| Purpose is unclear to the model | Purpose is clear: load a document for analysis |
+
+The constrained version is **safer**, because it can't reach internal systems or unexpected content. It's also **easier for the model to use correctly**, because its name and contract say exactly what it's for. The same idea applies elsewhere: `run_sql(query)` becomes `get_order(order_id)` plus `list_orders(customer_id)`, and `run_shell(cmd)` becomes `run_tests(path)`.
+
+## Scoped cross-role tools for high-frequency needs
+
+Strict role separation has a cost. Sometimes an agent frequently needs a small piece of another role's capability. Suppose the synthesis agent often needs to check one fact: a date, a figure, a name. Under strict hub-and-spoke, every check becomes a round trip: synthesis returns to the coordinator, the coordinator invokes search, search returns, and the coordinator re-invokes synthesis. If that happens constantly, latency balloons.
+
+The guide's answer is a middle path: **give the agent a narrowly scoped cross-role tool for the high-frequency simple case, and keep routing complex cases through the coordinator.**
+
+- The synthesis agent gets `verify_fact(claim)`, which returns *supported / contradicted / not found* with a source. It's quick, narrow, and read-only.
+- It does **not** get full `web_search` and `load_document`. Open-ended research still goes through the coordinator to the search agent.
+
+This handles the common case cheaply while keeping the benefits of scoping: the synthesis agent still can't wander into open-ended research. The same pattern applies anywhere. A billing subagent that constantly needs order status gets a read-only `get_order_status(order_id)`, while real order changes still go through the order subagent.
+
+<Callout type="exam">
+Two over-corrections are common distractors. **"Give the agent all of the other role's tools"** removes the round trips but brings back misuse and selection problems. **"Have it batch every request for the end"** creates blocking dependencies, because later reasoning may depend on the answer. The correct option is usually a **scoped tool for the frequent simple case, with complex cases routed through the coordinator**.
+</Callout>
+
+## How this shows up on the exam
+
+- **"An agent with many tools often picks the wrong one" (the descriptions are already good)** → reduce each agent's tool set to its role, splitting into specialized agents if needed.
+- **"The synthesis (or report) agent does its own searching"** → remove tools outside its role.
+- **"A generic fetch or query tool reaches things it shouldn't"** → replace it with a constrained, purpose-specific tool that validates inputs.
+- **"Frequent small cross-role needs cause round-trip latency"** → a scoped cross-role tool for the common simple case, with complex cases still going through the coordinator.
+
+<KeyTakeaways>
+
+- **More tools means worse selection.** Aim for a handful (about 4–5) of clearly distinct tools per agent.
+- Agents **misuse tools outside their specialization**. The tool list defines the role.
+- Apply **least privilege**: each agent gets only the tools its role needs, which also limits the damage when something goes wrong.
+- **Replace generic tools with constrained ones**, for example `fetch_url` → `load_document` with URL validation and a clear input and output contract.
+- For frequent simple needs from another role, add a **narrow cross-role tool**, such as `verify_fact`, and keep **complex cases routed through the coordinator**.
+
+</KeyTakeaways>

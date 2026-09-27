@@ -1,0 +1,134 @@
+## Welcome to Module 2
+
+Module 1 was about how agents are organized: loops, coordinators, subagents, hooks, and sessions. Module 2 (18% of the exam) is about the **tools** those agents use. It covers how tools are described, how they report failure, how they're distributed across agents, and how they're connected through the **Model Context Protocol (MCP)**.
+
+This lesson covers Task Statement 2.1: designing tool interfaces the model will choose correctly.
+
+## The model chooses tools by reading
+
+When Claude decides which tool to call, it doesn't inspect your code. It sees three things for each tool:
+
+1. the **name**,
+2. the **description**, and
+3. the **input schema** (parameter names, types, and their descriptions).
+
+The guide states the consequence directly: **tool descriptions are the primary mechanism LLMs use for tool selection.** A minimal description gives the model almost nothing to go on, and when two tools sound alike, the choice between them becomes a coin flip.
+
+Here's a typical failure:
+
+```python
+tools = [
+    {"name": "search_docs",
+     "description": "Searches documentation.",
+     "input_schema": {"type": "object",
+                      "properties": {"query": {"type": "string"}}}},
+    {"name": "search_tickets",
+     "description": "Searches tickets.",
+     "input_schema": {"type": "object",
+                      "properties": {"query": {"type": "string"}}}},
+]
+```
+
+A user asks, *"Has anyone else reported the login bug on Android?"* Is that documentation or tickets? Both tools take the same input and have one-line descriptions. The model has to guess, and it will sometimes guess wrong.
+
+## Anatomy of a good description
+
+The guide lists what a good description includes: **input formats, example queries, edge cases, and boundary explanations**, meaning when to use this tool rather than a similar one. Here is the same pair, rewritten:
+
+```python
+search_tickets = {
+    "name": "search_tickets",
+    "description": (
+        "Searches customer support tickets: reports of bugs, "
+        "outages, and account problems filed by users. Returns "
+        "up to 20 tickets with ID (format TKT-123456), title, "
+        "status, product area, and created date.\n"
+        "Use for: whether an issue has been reported, how often, "
+        "and its status. E.g. 'Has anyone reported the Android "
+        "login bug?', 'Open tickets about billing errors'.\n"
+        "Do NOT use for how-to or product-behavior questions; "
+        "use search_docs for those.\n"
+        "Edge cases: an empty result means no matching tickets "
+        "exist. Searching by ticket ID returns that ticket."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Keywords or a ticket ID (TKT-...)",
+            },
+            "status": {
+                "type": "string",
+                "enum": ["open", "closed", "any"],
+                "description": "Filter by status. Default: any.",
+            },
+        },
+        "required": ["query"],
+    },
+}
+```
+
+Each part does a job:
+
+| Part | Why it matters |
+|---|---|
+| **What it does and returns** | The model knows what information it will get back and whether that answers the question. |
+| **Input formats** | ID patterns like `TKT-123456` let the model match identifiers in the user's message to the right tool. |
+| **Example queries** | Concrete examples show intent far better than abstract categories. |
+| **Boundaries** ("Do NOT use for… use X instead") | Directly separates the tool from its look-alikes. |
+| **Edge cases** | Explains what empty results or special inputs mean, so the model doesn't misread them. |
+
+Longer descriptions cost a few tokens. Wrong tool calls cost far more: wasted turns, wrong answers, and confused users.
+
+## Overlapping tools: rename, rewrite, or split
+
+When two tools genuinely overlap, better wording may not be enough. The guide gives two structural fixes.
+
+### Rename and rewrite to remove the overlap
+
+A research system has `analyze_content` and `analyze_document`, with near-identical descriptions. The coordinator misroutes between them constantly. In practice, `analyze_content` only ever processes web search results. So make the name and description say that:
+
+- `analyze_content` → **`extract_web_results`**: "Extracts key facts from web search results (title, URL, snippet). Use only on output from web_search."
+- `analyze_document` stays, rewritten to say it handles uploaded or fetched documents (PDF, DOCX, long-form text).
+
+The name is part of the description. A name that states the tool's specific purpose prevents most misrouting before the model even reads further.
+
+### Split generic tools into purpose-specific ones
+
+A single `analyze_document(document, instructions)` tool gets used for everything: pulling numbers, summarizing, and fact-checking. Its outputs vary wildly because the job varies, and whatever consumes those outputs can't rely on their shape. The guide's fix is to **split it into purpose-specific tools with defined input and output contracts**:
+
+| Tool | Input | Output |
+|---|---|---|
+| `extract_data_points` | document, list of fields | `{field: value, source_location}` records |
+| `summarize_content` | document, target length | summary text plus key points |
+| `verify_claim_against_source` | claim, document | `{verdict: supported/contradicted/not_found, evidence}` |
+
+Each tool now has one job the model can recognize, and each output has a shape the rest of the system can depend on.
+
+## System prompts can undo good descriptions
+
+The last point in Task 2.1 is easy to miss: **wording in the system prompt affects tool selection**, sometimes more than the tool descriptions do. Instructions keyed to particular words create associations the model follows literally:
+
+- *"If the customer mentions a manager, escalate."* The agent now escalates when someone asks about their **account manager** settings.
+- *"Always analyze documents carefully."* The agent now reaches for `analyze_document` whenever the word "document" appears, even for web results.
+- *"Look up the customer record whenever an order is mentioned."* The agent now calls `get_customer` instead of `lookup_order` for "check my order #12345."
+
+Those instructions can override perfectly good tool descriptions. When tool selection goes wrong, **review the system prompt for keyword-triggered instructions** as well as the descriptions. Rewrite them to describe the *situation* ("escalate when the customer asks to speak with a human or a supervisor") rather than a trigger word.
+
+## How this shows up on the exam
+
+- **The agent picks the wrong one of two similar tools, and both have minimal descriptions** → the most effective **first step** is expanding the descriptions: purpose, input formats, example queries, boundaries. Few-shot examples add tokens without fixing the root cause. A keyword routing layer is over-engineering. Merging the tools is more effort than a first step warrants.
+- **Two tools with near-identical descriptions** → rename and rewrite so each has a distinct, specific purpose.
+- **A generic tool with inconsistent outputs** → split it into purpose-specific tools with input and output contracts.
+- **Good descriptions, but selection still goes wrong on certain words** → look for keyword-sensitive instructions in the system prompt.
+
+<KeyTakeaways>
+
+- The model chooses tools from their **name, description, and input schema**. Descriptions are the main lever.
+- A good description covers **what the tool does and returns, input formats, example queries, edge cases, and boundaries** (when to use a similar tool instead).
+- Fix overlap by **renaming and rewriting** so each tool has a distinct purpose, or by **splitting** a generic tool into purpose-specific tools with defined input and output contracts.
+- **System prompt wording** can create keyword-triggered tool associations that override good descriptions. Review the prompt when routing goes wrong.
+- For misrouting between tools with minimal descriptions, **better descriptions are the proportionate first step**.
+
+</KeyTakeaways>
